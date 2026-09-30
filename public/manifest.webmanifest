@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "Atlas das Urnas · Eleições 2022",
+  "short_name": "Atlas das Urnas",
+  "description": "Explore os resultados eleitorais de 2022 por território, candidato e zona eleitoral.",
+  "lang": "pt-BR",
+  "start_url": "/?vista=panorama",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#18242b",
+  "background_color": "#f6f4ef",
+  "icons": [
+    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

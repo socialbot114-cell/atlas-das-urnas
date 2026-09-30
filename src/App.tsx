@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Chart, donutOption, heatOption, lineOption, radarOption, rankingOption, scatterOption, stackedOption, treemapOption, comparisonOption, zonesOption } from "./components/Charts";
 import { MapPanel } from "./components/MapPanel";
 import { ZoneDetailModal } from "./components/ZoneDetailModal";
-import { formatNumber, formatPct, titleCase } from "./lib/format";
+import { markWelcomeComplete, shouldShowWelcome, WelcomeIntro } from "./components/WelcomeIntro";
+import { fold, formatNumber, formatPct, titleCase } from "./lib/format";
 import { loadBase, loadGeo, loadSpPoints, loadVotes } from "./lib/load";
-import { buildView, cargosFor, searchAll } from "./lib/metrics";
+import { buildView, cargosFor, searchAll, type View } from "./lib/metrics";
 import { buildZoneDetail } from "./lib/zone-detail";
-import { readUrlState, writeUrlState } from "./lib/url-state";
+import { readUrlState, urlForState, writeUrlState } from "./lib/url-state";
 import type { AtlasView, Catalog, DfData, Meta, Metric, MapMode, RaVotes, SpPoint, Theme, Uf, VoteFile, Zona } from "./types";
 
 const METRICS: { id: Metric; label: string }[] = [
@@ -20,8 +21,11 @@ const METRICS: { id: Metric; label: string }[] = [
 export function App() {
   const initial = useMemo(readUrlState, []);
   const [theme, setTheme] = useState<Theme>(initial.theme);
+  const [welcomeOpen, setWelcomeOpen] = useState(shouldShowWelcome);
   const [base, setBase] = useState<{ meta: Meta; catalog: Catalog; zonas: Zona[]; df: DfData; raVotes: RaVotes } | null>(null);
   const [votes, setVotes] = useState<VoteFile | null>(null);
+  const [votesCargo, setVotesCargo] = useState<string | null>(null);
+  const [lastView, setLastView] = useState<View | null>(null);
   const [geo, setGeo] = useState<GeoJSON.FeatureCollection | null>(null);
   const [spPoints, setSpPoints] = useState<SpPoint[]>([]);
   const [error, setError] = useState("");
@@ -41,10 +45,17 @@ export function App() {
   const [zoneModal, setZoneModal] = useState<number | null>(initial.zone);
   const closeZone = useCallback(() => setZoneModal(null), []);
   const [copied, setCopied] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSearch, setMobileSearch] = useState("");
+  const [municipalityPickerOpen, setMunicipalityPickerOpen] = useState(false);
+  const [municipalityQuery, setMunicipalityQuery] = useState("");
+  const [candidatePickerTarget, setCandidatePickerTarget] = useState<"first" | "second" | null>(null);
+  const [candidateQuery, setCandidateQuery] = useState("");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("tema", theme);
+    try { window.localStorage.setItem("tema", theme); } catch { /* The selected theme remains active for this visit. */ }
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#101820" : "#f6f4ef");
   }, [theme]);
 
   useEffect(() => {
@@ -58,6 +69,7 @@ export function App() {
       setMunId(state.munId); setRa(state.ra); setCandId(state.candId);
       setCompareId(state.compareId); setMetric(state.metric); setMapMode(state.mapMode);
       setZoneModal(state.zone); setTheme(state.theme);
+      window.scrollTo({ top: 0, behavior: "auto" });
     };
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
@@ -65,8 +77,17 @@ export function App() {
 
   useEffect(() => {
     loadBase().then(([meta, catalog, zonas, df, raVotes]) => setBase({ meta, catalog, zonas, df, raVotes })).catch((reason: Error) => setError(reason.message));
-    loadSpPoints().then(setSpPoints).catch(() => setSpPoints([]));
   }, []);
+
+  useEffect(() => {
+    if (uf !== "SP") {
+      setSpPoints([]);
+      return;
+    }
+    let cancel = false;
+    loadSpPoints().then((data) => { if (!cancel) setSpPoints(data); }).catch(() => { if (!cancel) setSpPoints([]); });
+    return () => { cancel = true; };
+  }, [uf]);
 
   useEffect(() => {
     if (!base) return;
@@ -76,36 +97,56 @@ export function App() {
 
   useEffect(() => {
     let cancel = false;
-    setVotes(null);
-    loadVotes(cargo).then((file) => { if (!cancel) setVotes(file); }).catch((reason: Error) => setError(reason.message));
+    setVotesCargo(null);
+    loadVotes(cargo).then((file) => { if (!cancel) { setVotes(file); setVotesCargo(cargo); } }).catch((reason: Error) => setError(reason.message));
     return () => { cancel = true; };
   }, [cargo]);
 
   useEffect(() => {
     let cancel = false;
     setGeo(null);
+    if (atlasView !== "panorama" && atlasView !== "territorio") return () => { cancel = true; };
     loadGeo(uf === "DF" ? "/data/df-ra.geojson" : "/data/sp-mun.geojson").then((file) => { if (!cancel) setGeo(file); });
     return () => { cancel = true; };
-  }, [uf]);
+  }, [uf, atlasView]);
 
-  const view = useMemo(() => {
-    if (!base || !votes) return null;
+  const currentView = useMemo(() => {
+    if (!base || !votes || votesCargo !== cargo) return null;
     return buildView({ catalog: base.catalog, votes, zonas: base.zonas, df: base.df, spPoints, raVotes: base.raVotes, uf, cargo, munId, ra, candId, partido, metric });
-  }, [base, votes, spPoints, uf, cargo, munId, ra, candId, partido, metric]);
+  }, [base, votes, votesCargo, spPoints, uf, cargo, munId, ra, candId, partido, metric]);
+  useEffect(() => { if (currentView) setLastView(currentView); }, [currentView]);
+  const view = currentView ?? lastView;
 
   const results = base && query.trim().length >= 2 ? searchAll(base.catalog, base.df, base.zonas, query, uf, munId) : [];
+  const municipalityResults = useMemo(() => {
+    if (!base) return [];
+    const municipalities = base.catalog.municipios.filter((item) => item.uf === "SP");
+    if (municipalityQuery.trim()) {
+      const needle = fold(municipalityQuery);
+      return municipalities.filter((item) => fold(item.nome).includes(needle)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).slice(0, 30);
+    }
+    const featured = ["São Paulo", "Campinas", "Guarulhos", "São Bernardo do Campo", "Santos", "Ribeirão Preto", "Sorocaba", "São José dos Campos"];
+    return featured.map((name) => municipalities.find((item) => fold(item.nome) === fold(name))).filter((item): item is typeof municipalities[number] => item != null);
+  }, [base, municipalityQuery]);
   const zoneDetail = useMemo(() => {
-    if (!base || !votes || zoneModal == null || (uf === "SP" && munId == null) || (uf === "DF" && ra != null && !["Presidente", "Governador", "Senador"].includes(cargo))) return null;
+    if (!base || !votes || votesCargo !== cargo || zoneModal == null || (uf === "SP" && munId == null) || (uf === "DF" && ra != null && !["Presidente", "Governador", "Senador"].includes(cargo))) return null;
     return buildZoneDetail({ catalog: base.catalog, df: base.df, spPoints, votes, zonas: base.zonas, uf, zona: zoneModal, cargo, ra, munId });
-  }, [base, votes, spPoints, zoneModal, uf, cargo, ra, munId]);
+  }, [base, votes, votesCargo, spPoints, zoneModal, uf, cargo, ra, munId]);
   const filteredZones = view?.zones.filter((item) => {
     const needle = zoneQuery.trim().toLocaleLowerCase("pt-BR");
     return !needle || String(item.zona).includes(needle) || item.lider.toLocaleLowerCase("pt-BR").includes(needle) || item.regioes.some((region) => region.toLocaleLowerCase("pt-BR").includes(needle));
   }).sort((a, b) => zoneSort === "aptos" ? b.aptos - a.aptos : zoneSort === "abstencao" ? b.abs / Math.max(b.aptos, 1) - a.abs / Math.max(a.aptos, 1) : a.zona - b.zona) ?? [];
   const highAbstentionZones = useMemo(() => [...(view?.zones ?? [])].filter((item) => item.aptos > 0).sort((a, b) => b.abs / b.aptos - a.abs / a.aptos).slice(0, 12), [view]);
   const activeId = candId ?? view?.selected?.i ?? null;
+  const comparisonCandidates = useMemo(() => {
+    if (!view) return [];
+    const allowed = view.ranks.filter((item) => candidatePickerTarget !== "second" || item.id !== activeId);
+    if (!candidateQuery.trim()) return allowed.slice(0, 30);
+    const needle = fold(candidateQuery);
+    return allowed.filter((item) => fold(`${item.nome} ${item.partido} ${item.num}`).includes(needle)).slice(0, 50);
+  }, [view, candidatePickerTarget, activeId, candidateQuery]);
   const comparison = useMemo(() => {
-    if (!base || !votes || !view || atlasView !== "comparar") return null;
+    if (!base || !votes || votesCargo !== cargo || !view || atlasView !== "comparar") return null;
     const other = compareId != null && compareId !== activeId && view.ranks.some((item) => item.id === compareId)
       ? compareId : view.ranks.find((item) => item.id !== activeId)?.id;
     if (other == null) return null;
@@ -118,7 +159,7 @@ export function App() {
       first: region.nominal ? region.selected / region.nominal * 100 : 0,
       second: compared.regions[index]?.nominal ? compared.regions[index].selected / compared.regions[index].nominal * 100 : 0,
     })).filter((row) => row.aptos > 0) };
-  }, [base, votes, spPoints, view, compareId, activeId, uf, cargo, munId, ra, atlasView]);
+  }, [base, votes, votesCargo, spPoints, view, compareId, activeId, uf, cargo, munId, ra, atlasView]);
   const metricLabel = METRICS.find((item) => item.id === metric)?.label ?? "Indicador";
   const localVotesAvailable = uf === "SP" ? cargo === "Presidente" : ["Presidente", "Governador", "Senador"].includes(cargo);
   const pointMetricLabel = !localVotesAvailable && metric !== "comparecimento" ? "Abstenção nos locais" : metricLabel;
@@ -180,6 +221,53 @@ export function App() {
     }));
   }, [base, view, uf, cargo, ra, munId, metric, activeId, spPoints, localVotesAvailable]);
 
+  function navigateView(next: AtlasView) {
+    if (next === atlasView) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileSearchOpen(false);
+      return;
+    }
+    const nextUrl = urlForState({ view: next, uf, cargo, munId, ra, candId, compareId, metric, mapMode, zone: zoneModal, theme });
+    window.history.pushState(null, "", nextUrl);
+    setAtlasView(next);
+    setMobileSearchOpen(false);
+    setMunicipalityPickerOpen(false);
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
+
+  function chooseSearchResult(item: (typeof results)[number]) {
+    setUf(item.uf);
+    setCargo(item.cargo ?? cargo);
+    setCandId(item.candId ?? null);
+    setMunId(item.munId ?? null);
+    setRa(item.ra ?? null);
+    setZoneModal(item.zone ?? null);
+    setPartido(null);
+    setZoneQuery("");
+    setQuery("");
+    setMobileSearch("");
+    setMobileSearchOpen(false);
+  }
+
+  function chooseMunicipality(id: number) {
+    setMunId(id);
+    setRa(null);
+    setMunicipalityPickerOpen(false);
+    setMunicipalityQuery("");
+    setZoneQuery("");
+  }
+
+  const closeMobileSearch = useCallback(() => { setMobileSearchOpen(false); setMobileSearch(""); setQuery(""); }, []);
+  const closeMunicipalityPicker = useCallback(() => { setMunicipalityPickerOpen(false); setMunicipalityQuery(""); }, []);
+  const closeCandidatePicker = useCallback(() => { setCandidatePickerTarget(null); setCandidateQuery(""); }, []);
+  const finishWelcome = useCallback(() => { markWelcomeComplete(); setWelcomeOpen(false); }, []);
+
+  function chooseComparisonCandidate(id: number) {
+    if (candidatePickerTarget === "first") setCandId(id);
+    else setCompareId(id);
+    closeCandidatePicker();
+  }
+
   function chooseUf(next: Uf) {
     setUf(next);
       setMunId(null);
@@ -211,32 +299,38 @@ export function App() {
   }
 
   if (error) return <main className="boot"><h1>Não foi possível abrir os dados</h1><p>{error}</p></main>;
-  if (!base || !view || !votes) return <main className="boot"><p className="eyebrow">Atlas das Urnas</p><h1>Organizando os boletins.</h1></main>;
+  if (welcomeOpen) return <WelcomeIntro onFinish={finishWelcome} />;
+  if (!base || !view || !votes) return <main className="boot" role="status"><img src="/app-icon.svg" alt="" /><p className="eyebrow">Atlas das Urnas</p><h1>Preparando seu Atlas</h1><span>Carregando os resultados eleitorais...</span></main>;
 
   const selectedKey = ra != null ? `ra-${ra}` : munId != null ? `mun-${munId}` : null;
+  const selectedRegion = selectedKey ? view.regions.find((item) => item.key === selectedKey) ?? null : null;
   const regionPeak = Math.max(...view.regions.map((item) => item.value), 1);
   const map = <MapPanel uf={uf} theme={theme} mode={mapMode} regions={view.regions} geo={geo} points={points} selectedKey={selectedKey} metricLabel={metricLabel} pointMetricLabel={pointMetricLabel} absolute={metric === "votos"} onSelect={selectRegion} />;
-  const mapNote = <p className="note">{uf === "DF" ? `${base.df.nota} ${base.df.cobertura.comCoordenada} de ${base.df.cobertura.locais} locais aparecem no mapa; os demais permanecem nos totais e nas tabelas.` : "Malha municipal do IBGE. Pontos representam locais georreferenciados."} {localVotesAvailable ? "O calor representa o indicador selecionado por local." : `A votação completa por local deste cargo não está no arquivo publicado; o calor representa ${pointMetricLabel.toLocaleLowerCase("pt-BR")}.`}</p>;
+  const mapNote = <details className="map-note"><summary>Metodologia e cobertura</summary><p className="note">{uf === "DF" ? `${base.df.nota} ${base.df.cobertura.comCoordenada} de ${base.df.cobertura.locais} locais aparecem no mapa; os demais permanecem nos totais e nas tabelas.` : "Malha municipal do IBGE. Pontos representam locais georreferenciados."} {localVotesAvailable ? "O calor representa o indicador selecionado por local." : `A votação completa por local deste cargo não está no arquivo publicado; o calor representa ${pointMetricLabel.toLocaleLowerCase("pt-BR")}.`}</p></details>;
   const pp = (value: number) => `${value.toFixed(1).replace(".", ",")} p.p.`;
   return (
-    <>
+    <div className="app-shell" aria-busy={Boolean(lastView && !currentView)}>
       <a className="skip" href="#conteudo">Ir para o conteúdo</a>
       <header className="top">
-        <div>
-          <p className="eyebrow">Atlas eleitoral · 1º turno · 2022</p>
-          <h1>Atlas das Urnas</h1>
+        <div className="brand-lockup">
+          <img src="/app-icon.svg" alt="" />
+          <div>
+            <p className="eyebrow">Atlas eleitoral · 1º turno · 2022</p>
+            <h1>Atlas das Urnas</h1>
+          </div>
         </div>
         <div className="top-actions">
           <div className="segment" role="group" aria-label="Unidade da Federação">
-            {(["DF", "SP"] as Uf[]).map((item) => <button key={item} aria-pressed={uf === item} onClick={() => chooseUf(item)}>{item === "DF" ? "Distrito Federal" : "São Paulo"}</button>)}
+            {(["DF", "SP"] as Uf[]).map((item) => <button key={item} aria-label={item === "DF" ? "Distrito Federal" : "São Paulo"} aria-pressed={uf === item} onClick={() => chooseUf(item)}><span className="uf-full">{item === "DF" ? "Distrito Federal" : "São Paulo"}</span><span className="uf-short">{item}</span></button>)}
           </div>
-          <button className="ghost" aria-pressed={theme === "dark"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Claro" : "Escuro"}</button>
+          <button className="help-button desktop-help" aria-label="Ajuda: como usar o Atlas" title="Como usar o Atlas" onClick={() => setWelcomeOpen(true)}><HelpIcon /></button>
+          <button className="ghost theme-toggle" aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} aria-pressed={theme === "dark"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><ThemeIcon theme={theme} /><span>{theme === "dark" ? "Claro" : "Escuro"}</span></button>
         </div>
       </header>
       <main id="conteudo">
         <nav className="view-nav" aria-label="Vistas do atlas">
           {([["panorama", "Panorama", "O essencial"], ["territorio", "Território", "Explore o mapa"], ["comparar", "Comparar", "Dois candidatos"], ["zonas", "Zonas e locais", "Escala eleitoral"]] as [AtlasView, string, string][]).map(([id, label, hint], index) => (
-            <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => setAtlasView(id)}><small>0{index + 1} · {hint}</small><strong>{label}</strong></button>
+            <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => navigateView(id)}><small>0{index + 1} · {hint}</small><strong>{label}</strong></button>
           ))}
         </nav>
         <section className="toolbar">
@@ -251,17 +345,7 @@ export function App() {
               <ul className="results">
                 {results.map((item, index) => (
                   <li key={`${item.kind}-${item.label}-${index}`}>
-                    <button onClick={() => {
-                      setUf(item.uf);
-                      setCargo(item.cargo ?? cargo);
-                      setCandId(item.candId ?? null);
-                      setMunId(item.munId ?? null);
-                      setRa(item.ra ?? null);
-                      setZoneModal(item.zone ?? null);
-                      setPartido(null);
-                      setZoneQuery("");
-                      setQuery("");
-                    }}>
+                    <button onClick={() => chooseSearchResult(item)}>
                       <strong>{item.label}</strong>
                       <small>{item.kind} · {item.hint}</small>
                     </button>
@@ -271,8 +355,22 @@ export function App() {
             )}
           </label>
         </section>
-        <div className="context-bar"><span>{uf === "DF" ? "Distrito Federal" : "São Paulo"}</span><span>{cargo}</span><span>{view.scopeLabel}</span><button className="ghost share-link" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); window.setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); } }}>{copied ? "Link copiado ✓" : "Copiar link ↗"}</button></div>
-        {(atlasView === "panorama" || atlasView === "territorio") && <p className="reading">{view.reading}</p>}
+        <button className="mobile-search-launch" onClick={() => { setMobileSearch(query); setMobileSearchOpen(true); }}><SearchIcon /><span>Buscar candidatos, cidades, zonas...</span><kbd>⌕</kbd></button>
+        <details className="mobile-options">
+          <summary><span className="mobile-options-title">Filtros</span><span className="mobile-options-current">{cargo}{atlasView === "panorama" || atlasView === "territorio" ? ` · ${metricLabel}` : ""}</span></summary>
+          <div className="mobile-options-panel">
+            <label>Cargo<select value={cargo} onChange={(event) => { setCargo(event.target.value); setCandId(null); setCompareId(null); setPartido(null); }}>{cargosFor(base.catalog, uf).map((item) => <option key={item}>{item}</option>)}</select></label>
+            {(atlasView === "panorama" || atlasView === "territorio") && <>
+              <label>Indicador do mapa<select value={metric} onChange={(event) => setMetric(event.target.value as Metric)}>{METRICS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+              <div className="segment" role="group" aria-label="Camadas do mapa">
+                {([["ambos", "Mapa + calor"], ["regioes", "Regiões"], ["calor", "Calor"]] as [MapMode, string][]).map(([id, label]) => <button key={id} aria-pressed={mapMode === id} onClick={() => setMapMode(id)}>{label}</button>)}
+             </div>
+            </>}
+            <button className="mobile-help-button" onClick={() => setWelcomeOpen(true)}><HelpIcon /><span>Como usar o Atlas</span><b aria-hidden="true">›</b></button>
+          </div>
+        </details>
+        <div className="context-bar"><span>{uf === "DF" ? "Distrito Federal" : "São Paulo"}</span><span>{cargo}</span>{(ra != null || munId != null) && <span>{view.scopeLabel}</span>}<button className="ghost share-link" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); window.setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); } }}>{copied ? "Link copiado ✓" : "Copiar link ↗"}</button></div>
+        {(atlasView === "panorama" || atlasView === "territorio") && <><p className="reading">{view.reading}</p>{atlasView === "panorama" && view.ranks[0] && <p className="mobile-reading"><span>RESULTADO PRINCIPAL</span><strong>{view.ranks[0].nome}</strong><span>lidera {cargo.toLocaleLowerCase("pt-BR")} em {view.scopeLabel} com {formatPct(view.ranks[0].share)} dos votos nominais.</span></p>}</>}
         {partido && <p className="chip-row"><button className="chip" onClick={() => setPartido(null)}>Partido {partido} · limpar</button></p>}
         {(ra != null || munId != null) && <p className="chip-row"><button className="chip" onClick={() => selectRegion(null)}>Recorte: {view.scopeLabel} · ver tudo</button></p>}
         {atlasView === "panorama" && <section className="kpis" aria-label="Indicadores">
@@ -295,7 +393,7 @@ export function App() {
             <Chart option={rankingOption(view, theme, activeId)} label="Ranking de votos nominais" />
           </article>
         </section>
-        <div className="section-bridge"><div><p className="eyebrow">Aprofundar</p><h2>Uma eleição, muitas escalas.</h2><p>Explore o território, compare candidatos ou desça até as zonas e locais de votação.</p></div><button className="ghost" onClick={() => setAtlasView("territorio")}>Explorar território ↗</button></div>
+        <div className="section-bridge"><div><p className="eyebrow">Aprofundar</p><h2>Uma eleição, muitas escalas.</h2><p>Explore o território, compare candidatos ou desça até as zonas e locais de votação.</p></div><button className="ghost" onClick={() => navigateView("territorio")}>Explorar território ↗</button></div>
         <details className="advanced"><summary>Análises adicionais <span>Composição · partidos · dispersão · concentração</span></summary>
         <section className="mosaic">
           <Card kicker="03" title="Composição"><Chart option={donutOption(view, theme)} label="Composição dos votos" /></Card>
@@ -312,16 +410,16 @@ export function App() {
         </details>
         </>}
         {atlasView === "territorio" && <section className="territory-layout">
-          <article className="card map-card"><header><div><p className="eyebrow">Território · {metricLabel}</p><h2>{uf === "DF" ? "Regiões administrativas" : "Municípios"}</h2></div></header>{map}{mapNote}</article>
+          <article className="card map-card"><header><div><p className="eyebrow">Território · {metricLabel}</p><h2>{uf === "DF" ? "Regiões administrativas" : "Municípios"}</h2></div></header>{map}{selectedRegion && <div className="map-selection-card"><div><small>Área selecionada</small><strong>{selectedRegion.label}</strong><span>{formatNumber(selectedRegion.aptos)} eleitores · {formatPct(selectedRegion.aptos ? selectedRegion.abs / selectedRegion.aptos * 100 : 0)} de abstenção</span></div><button onClick={() => navigateView("zonas")}>Ver zonas <span aria-hidden="true">›</span></button><button className="selection-clear" aria-label="Limpar seleção do mapa" onClick={() => selectRegion(null)}>×</button></div>}{mapNote}</article>
           <article className="card territory-list"><header><div><p className="eyebrow">Leitura territorial</p><h2>Do maior para o menor</h2></div></header><p className="note">Selecione uma área para atualizar todo o atlas. {metric === "votos" ? "Votos do candidato selecionado." : `${metricLabel} em percentual.`}</p>{selectedKey && <div className="territory-profile"><span>Recorte ativo · {view.scopeLabel}</span><strong>{formatNumber(view.kpis.aptos)} aptos</strong><small>{formatPct(view.kpis.aptos ? view.kpis.abs / view.kpis.aptos * 100 : 0)} de abstenção · {formatNumber(view.kpis.secoes)} seções</small></div>}<div className="territory-scroll">{[...view.regions].sort((a, b) => b.value - a.value).map((item, index) => <button key={item.key} className="territory-item" aria-pressed={item.key === selectedKey} onClick={() => selectRegion(item.key)}><span className="territory-index">{String(index + 1).padStart(2, "0")}</span><span className="territory-item-body"><strong>{item.label}</strong><small>{item.detail} · {formatNumber(item.aptos)} aptos</small><i style={{ width: `${Math.max(0, Math.min(100, item.value / regionPeak * 100))}%` }} /></span><b>{metric === "votos" ? formatNumber(item.value) : formatPct(item.value)}</b></button>)}</div></article>
         </section>}
         {atlasView === "comparar" && <section className="comparison-view"><div className="section-intro"><p className="eyebrow">Comparar · {view.scopeLabel}</p><h2>Dois candidatos, lado a lado.</h2><p>Percentuais sobre votos nominais do mesmo cargo. A diferença é expressa em pontos percentuais.</p></div>
-          <div className="comparison-controls"><label>Primeiro candidato<select value={activeId ?? ""} onChange={(event) => setCandId(Number(event.target.value))}>{view.ranks.map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label><label>Segundo candidato<select value={comparison?.second.id ?? ""} onChange={(event) => setCompareId(Number(event.target.value))}>{view.ranks.filter((item) => item.id !== activeId).map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label></div>
+          <div className="comparison-controls desktop-comparison-controls"><label>Primeiro candidato<select value={activeId ?? ""} onChange={(event) => setCandId(Number(event.target.value))}>{view.ranks.map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label><label>Segundo candidato<select value={comparison?.second.id ?? ""} onChange={(event) => setCompareId(Number(event.target.value))}>{view.ranks.filter((item) => item.id !== activeId).map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label></div>
+          <div className="mobile-comparison-pickers"><button onClick={() => setCandidatePickerTarget("first")}><small>01 · PRIMEIRO CANDIDATO</small><strong>{comparison?.first.nome ?? "Escolher candidato"}</strong><span>{comparison?.first.partido ?? "Toque para pesquisar"} <i>›</i></span></button><button onClick={() => setCandidatePickerTarget("second")}><small>02 · SEGUNDO CANDIDATO</small><strong>{comparison?.second.nome ?? "Escolher candidato"}</strong><span>{comparison?.second.partido ?? "Toque para pesquisar"} <i>›</i></span></button></div>
           {comparison ? <><div className="comparison-cards"><article className="comparison-card first"><p className="eyebrow">01 · Selecionado</p><h3>{comparison.first.nome}</h3><strong>{formatPct(comparison.first.share)}</strong><span>{formatNumber(comparison.first.votos)} votos nominais</span></article><article className="comparison-difference"><small>Diferença no recorte</small><strong>{pp(Math.abs(comparison.first.share - comparison.second.share))}</strong><span>entre as participações</span></article><article className="comparison-card second"><p className="eyebrow">02 · Comparado</p><h3>{comparison.second.nome}</h3><strong>{formatPct(comparison.second.share)}</strong><span>{formatNumber(comparison.second.votos)} votos nominais</span></article></div><article className="card wide"><header><div><p className="eyebrow">Diferença territorial</p><h2>Onde cada candidato se destaca</h2></div></header><Chart option={comparisonOption(comparison.rows, theme, comparison.first.nome, comparison.second.nome)} label="Diferença em pontos percentuais entre candidatos por território" /><p className="note">Barras positivas favorecem {comparison.first.nome}; negativas favorecem {comparison.second.nome}. Mostramos os territórios com maior diferença absoluta.</p></article></> : <p className="note">Selecione dois candidatos com votos neste recorte para comparar.</p>}
         </section>}
-        {atlasView === "zonas" && <div className="section-intro"><p className="eyebrow">Zonas e locais · 1º turno</p><h2>A eleição vista de perto.</h2><p>Explore resultados agregados por zona e os locais de votação que a compõem.</p>{uf === "DF" && ra != null && !localVotesAvailable && <p className="note">O cruzamento RA × zona para este cargo não tem votação completa por local. Remova o recorte de RA acima para explorar os resultados completos por zona no DF.</p>}{uf === "SP" && munId == null && <label className="municipality-picker">Escolha um município de São Paulo<select value="" onChange={(event) => { setMunId(Number(event.target.value)); setZoneQuery(""); }}><option value="" disabled>Selecionar município</option>{base.catalog.municipios.filter((item) => item.uf === "SP").sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).map((item) => <option key={item.i} value={item.i}>{titleCase(item.nome)}</option>)}</select></label>}</div>}
-        {atlasView === "zonas" && highAbstentionZones.length > 0 && <article className="card wide zone-distribution"><header><div><p className="eyebrow">Distribuição · {view.scopeLabel}</p><h2>Zonas com maior abstenção</h2></div></header><Chart option={zonesOption(highAbstentionZones, theme)} label="As doze zonas com maior taxa de abstenção" onSelect={(index) => setZoneModal(highAbstentionZones[index].zona)} /><p className="note">Taxa de abstenção sobre aptos. Selecione uma barra para abrir os resultados da zona; o gráfico mostra até 12 zonas.</p></article>}
-        {(atlasView === "panorama" || atlasView === "zonas") && <article className="card wide">
+        {atlasView === "zonas" && <div className="section-intro"><p className="eyebrow">Zonas e locais · 1º turno</p><h2>A eleição vista de perto.</h2><p>Explore resultados agregados por zona e os locais de votação que a compõem.</p>{uf === "DF" && ra != null && !localVotesAvailable && <p className="note">O cruzamento RA × zona para este cargo não tem votação completa por local. Remova o recorte de RA acima para explorar os resultados completos por zona no DF.</p>}{uf === "SP" && munId == null && <><label className="municipality-picker desktop-municipality-picker">Escolha um município de São Paulo<select value="" onChange={(event) => chooseMunicipality(Number(event.target.value))}><option value="" disabled>Selecionar município</option>{base.catalog.municipios.filter((item) => item.uf === "SP").sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).map((item) => <option key={item.i} value={item.i}>{titleCase(item.nome)}</option>)}</select></label><button className="mobile-municipality-trigger" onClick={() => setMunicipalityPickerOpen(true)}><span>Município</span><strong>Escolha sua cidade</strong><span aria-hidden="true">›</span></button></>}</div>}
+        {atlasView === "panorama" && <article className="card wide">
           <header>
             <div><p className="eyebrow">Microdados agregados</p><h2>Quem recebeu votos</h2></div>
             <button className="ghost" onClick={() => exportCsv(view.ranks, `${uf}-${cargo}`)}>Exportar CSV</button>
@@ -361,19 +459,103 @@ export function App() {
             </>
           )}
         </article>}
+        {atlasView === "zonas" && <>
+          <article className="card wide zone-browser">
+            <header className="zone-browser-header"><div><p className="eyebrow">Explorar por zona</p><h2>{munId != null || ra != null ? view.scopeLabel : "Todas as zonas"}</h2></div><button className="ghost zone-export" onClick={() => exportZonesCsv(filteredZones, `${uf}-${view.scopeLabel}`)}>Exportar</button></header>
+            <div className="zone-browser-controls"><label className="zone-list-search"><span className="sr-only">Pesquisar zonas por número, região ou liderança</span><SearchIcon /><input value={zoneQuery} onChange={(event) => setZoneQuery(event.target.value)} placeholder="Buscar zona, região ou liderança" /></label><label className="zone-sort"><span className="sr-only">Ordenar zonas</span><select value={zoneSort} onChange={(event) => setZoneSort(event.target.value as typeof zoneSort)}><option value="zona">Número da zona</option><option value="abstencao">Maior abstenção</option><option value="aptos">Mais eleitores</option></select></label></div>
+            <div className="zone-card-list">{filteredZones.map((item) => <button key={`${munId ?? "df"}-${item.zona}`} className="zone-card" onClick={() => setZoneModal(item.zona)} aria-label={`Abrir zona ${item.zona}, ${item.aptos} aptos, ${formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)} de abstenção`}>
+              <span className="zone-card-top"><span className="zone-card-title"><strong>Zona {item.zona}</strong><small>{item.regioes.length ? item.regioes.join(" · ") : view.scopeLabel}</small></span><span className="zone-chevron" aria-hidden="true">›</span></span>
+              <span className="zone-card-metrics"><span><small>Eleitores</small><strong>{formatNumber(item.aptos)}</strong></span><span><small>Seções</small><strong>{formatNumber(item.sec)}</strong></span><span><small>Abstenção</small><strong>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</strong></span></span>
+              <span className="zone-card-leader"><span>Líder nominal</span><strong>{item.lider}</strong><small>{formatNumber(item.votos)} votos nominais</small></span>
+            </button>)}{filteredZones.length === 0 && <p className="zone-empty">Nenhuma zona encontrada. Experimente outro número ou região.</p>}</div>
+            <div className="desktop-zone-table table-wrap"><table><thead><tr><th>Zona</th><th>Região</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead><tbody>{filteredZones.map((item) => <tr key={`table-${munId ?? "df"}-${item.zona}`}><td><button className="zone-open" onClick={() => setZoneModal(item.zona)}>Zona {item.zona}<span>ver detalhes ↗</span></button></td><td>{item.regioes.join(", ") || view.scopeLabel}</td><td>{item.locais || "—"}</td><td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</td><td>{item.lider}</td></tr>)}</tbody></table></div>
+          </article>
+          {highAbstentionZones.length > 0 && <details className="zone-distribution-more"><summary>Ver distribuição da abstenção</summary><article className="card wide zone-distribution"><header><div><p className="eyebrow">Distribuição · {view.scopeLabel}</p><h2>Zonas com maior abstenção</h2></div></header><Chart option={zonesOption(highAbstentionZones, theme)} label="As doze zonas com maior taxa de abstenção" onSelect={(index) => setZoneModal(highAbstentionZones[index].zona)} /><p className="note">Taxa sobre eleitores aptos. Toque em uma barra para abrir a zona.</p></article></details>}
+        </>}
       </main>
+      {mobileSearchOpen && <MobileSheet title="Buscar no Atlas" onClose={closeMobileSearch}>
+        <label className="sheet-search"><span className="sr-only">Buscar candidato, município, região administrativa ou zona</span><SearchIcon /><input className="sheet-autofocus" autoFocus value={mobileSearch} onChange={(event) => { setMobileSearch(event.target.value); setQuery(event.target.value); }} placeholder="Candidato, cidade, RA ou zona" /></label>
+        <div className="sheet-results" aria-live="polite">{results.length ? results.map((item, index) => <button key={`${item.kind}-${item.label}-${index}`} onClick={() => chooseSearchResult(item)}><span className="sheet-result-icon"><ViewIcon view={item.kind === "Zona eleitoral" ? "zonas" : item.kind === "Município" || item.kind === "Região administrativa" ? "territorio" : "comparar"} /></span><span><strong>{item.label}</strong><small>{item.kind} · {item.hint}</small></span><span className="sheet-chevron">›</span></button>) : mobileSearch.trim().length >= 2 ? <p className="sheet-empty">Nenhum resultado. Tente outro nome ou número.</p> : <div className="sheet-hint"><p>Encontre candidatos, municípios, regiões e zonas eleitorais.</p><span>Ex.: Lula · Taguatinga · Zona 15</span></div>}</div>
+      </MobileSheet>}
+      {municipalityPickerOpen && <MobileSheet title="Escolher município" onClose={closeMunicipalityPicker}>
+        <label className="sheet-search"><span className="sr-only">Buscar município de São Paulo</span><SearchIcon /><input className="sheet-autofocus" autoFocus value={municipalityQuery} onChange={(event) => setMunicipalityQuery(event.target.value)} placeholder="Digite o nome do município" /></label>
+        <div className="sheet-results municipality-results" aria-live="polite">{municipalityResults.map((item) => <button key={item.i} onClick={() => chooseMunicipality(item.i)}><span><strong>{titleCase(item.nome)}</strong><small>{formatNumber(item.aptos)} eleitores · {formatNumber(item.sec)} seções</small></span><span className="sheet-chevron">›</span></button>)}{municipalityResults.length === 0 && <p className="sheet-empty">Nenhum município encontrado.</p>}</div>
+      </MobileSheet>}
+      {candidatePickerTarget && <MobileSheet title={candidatePickerTarget === "first" ? "Primeiro candidato" : "Segundo candidato"} onClose={closeCandidatePicker}>
+        <label className="sheet-search"><span className="sr-only">Buscar candidato por nome, partido ou número</span><SearchIcon /><input className="sheet-autofocus" autoFocus value={candidateQuery} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="Nome, partido ou número" /></label>
+        <div className="sheet-results candidate-results" aria-live="polite">{comparisonCandidates.map((item) => <button key={item.id} onClick={() => chooseComparisonCandidate(item.id)}><span className="candidate-number-badge">{item.num}</span><span><strong>{item.nome}</strong><small>{item.partido} · {formatNumber(item.votos)} votos · {formatPct(item.share)}</small></span><span className="sheet-chevron">›</span></button>)}{comparisonCandidates.length === 0 && <p className="sheet-empty">Nenhum candidato encontrado. Revise a busca.</p>}{!candidateQuery.trim() && <p className="sheet-footnote">Mostrando os 30 candidatos mais votados. Digite para buscar em toda a lista.</p>}</div>
+      </MobileSheet>}
+      <nav className="mobile-tabbar" aria-label="Navegação principal">
+        {([["panorama", "Início"], ["territorio", "Mapa"], ["comparar", "Comparar"], ["zonas", "Zonas"]] as [AtlasView, string][]).map(([id, label]) => <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => navigateView(id)}><ViewIcon view={id} /><span>{label}</span></button>)}
+      </nav>
       <footer>
         <p>{base.meta.fonte}. Extração dos boletins em {base.meta.extracao}. Pleito em {base.meta.pleito}.</p>
         <ul>{base.meta.avisos.map((item) => <li key={item}>{item}</li>)}</ul>
         <p>{base.meta.geografias.join(" · ")}</p>
       </footer>
       <ZoneDetailModal detail={zoneDetail} onClose={closeZone} />
-    </>
+      {lastView && !currentView && <div className="app-transition-layer" role="status" aria-live="polite"><span className="map-loading-spinner" /><strong>Atualizando resultados</strong><small>Carregando {cargo.toLocaleLowerCase("pt-BR")}</small></div>}
+    </div>
   );
 }
 
 function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
   return <article className="kpi"><span>{label}</span><strong>{value}</strong>{note && <small>{note}</small>}</article>;
+}
+
+function MobileSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.classList.add("modal-open");
+    panel.current?.querySelector<HTMLElement>(".sheet-autofocus")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key !== "Tab" || !panel.current) return;
+      const controls = [...panel.current.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")];
+      if (!controls.length) return;
+      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("modal-open");
+      previous?.focus();
+    };
+  }, [onClose]);
+
+  return <div className="mobile-sheet-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={panel} className="mobile-sheet" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="mobile-sheet-grabber" aria-hidden="true" />
+      <header><h2>{title}</h2><button className="mobile-sheet-close" aria-label="Fechar" onClick={onClose}>×</button></header>
+      {children}
+    </section>
+  </div>;
+}
+
+function SearchIcon() {
+  return <svg className="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>;
+}
+
+function HelpIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.4 2.4 0 1 1 4 1.8c-.9.7-1.7 1.1-1.7 2.4M12 16.5v.1" /></svg>;
+}
+
+function ThemeIcon({ theme }: { theme: Theme }) {
+  return theme === "dark"
+    ? <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+    : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.3A8.5 8.5 0 0 1 8.7 3.5 8.5 8.5 0 1 0 20.5 15.3Z" /></svg>;
+}
+
+function ViewIcon({ view }: { view: AtlasView }) {
+  const paths: Record<AtlasView, ReactNode> = {
+    panorama: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
+    territorio: <><path d="M3 6.5 9 3l6 3 6-3v14.5L15 21l-6-3-6 3z" /><path d="M9 3v15m6-12v15" /></>,
+    comparar: <><path d="M4 19V9m8 10V4m8 15v-7" /><path d="M2 19h20" /></>,
+    zonas: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8m-8 4h5" /></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[view]}</svg>;
 }
 
 function Card({ kicker, title, children }: { kicker: string; title: string; children: ReactNode }) {

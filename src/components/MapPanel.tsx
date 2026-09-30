@@ -1,11 +1,11 @@
 import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MapMode, Theme, Uf } from "../types";
 import { formatNumber, formatPct } from "../lib/format";
 import type { RegionRow } from "../lib/metrics";
 
-const LIGHT = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DARK = LIGHT;
+const LIGHT = "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
+const DARK = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 
 interface Point {
@@ -42,6 +42,7 @@ export function MapPanel({
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const selectRef = useRef(onSelect);
   const themeRef = useRef(theme);
   selectRef.current = onSelect;
@@ -49,6 +50,8 @@ export function MapPanel({
 
   useEffect(() => {
     if (!holder.current) return;
+    setMapReady(false);
+    let fallback: number | undefined;
     const map = new MapLibreMap({
       container: holder.current,
       style: blankStyle(themeRef.current),
@@ -56,12 +59,14 @@ export function MapPanel({
       zoom: uf === "DF" ? 8.2 : 5.8,
       attributionControl: {},
     });
+    const onIdle = () => { setMapReady(true); if (fallback != null) window.clearTimeout(fallback); };
+    map.on("idle", onIdle);
+    fallback = window.setTimeout(() => setMapReady(true), 3500);
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
       map.addSource("areas", { type: "geojson", data: empty() });
       map.addSource("calor", { type: "geojson", data: empty() });
-       map.addLayer({ id: "areas", type: "fill", source: "areas", paint: { "fill-color": "#dce1dc", "fill-opacity": 0.78 } });
-       map.addLayer({ id: "areas-line", type: "line", source: "areas", paint: { "line-color": theme === "dark" ? "#f2f1eb" : "#18242b", "line-width": 0.6, "line-opacity": 0.45 } });
+        map.addLayer({ id: "areas", type: "fill", source: "areas", paint: { "fill-color": "#dce1dc", "fill-opacity": 0.78 } });
       map.addLayer({
         id: "calor",
         type: "heatmap",
@@ -69,11 +74,12 @@ export function MapPanel({
         paint: {
           "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0, 1, 1],
           "heatmap-intensity": 1.1,
-          "heatmap-radius": uf === "DF" ? 28 : 16,
-          "heatmap-opacity": 0.72,
+          "heatmap-radius": uf === "DF" ? 17 : 9,
+          "heatmap-opacity": 0.58,
            "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)", 0.35, "#286f73", 0.7, "#d4af86", 1, "#b46b48"],
         },
       });
+      map.addLayer({ id: "areas-line", type: "line", source: "areas", paint: { "line-color": theme === "dark" ? "#f2f1eb" : "#18242b", "line-width": 0.75, "line-opacity": 0.58 } });
       map.on("click", "areas", (event) => {
         const key = event.features?.[0]?.properties?.key;
         selectRef.current(typeof key === "string" && key ? key : null);
@@ -93,6 +99,8 @@ export function MapPanel({
     });
     mapRef.current = map;
     return () => {
+      if (fallback != null) window.clearTimeout(fallback);
+      map.off("idle", onIdle);
       map.remove();
       mapRef.current = null;
     };
@@ -164,6 +172,7 @@ export function MapPanel({
   return (
     <div className="map-shell">
       <div ref={holder} className="map" />
+      {!mapReady && <div className="map-loading" aria-label="Carregando mapa"><span /><span>Preparando o mapa</span></div>}
       <div className="map-legend">
          <span>0</span>
          <i />
@@ -186,7 +195,7 @@ function blankStyle(theme: Theme): StyleSpecification {
     },
     layers: [
       { id: "light", type: "raster", source: "light", layout: { visibility: theme === "light" ? "visible" : "none" } },
-      { id: "dark", type: "raster", source: "dark", layout: { visibility: theme === "dark" ? "visible" : "none" }, paint: { "raster-brightness-max": 0.48, "raster-saturation": -0.8 } },
+      { id: "dark", type: "raster", source: "dark", layout: { visibility: theme === "dark" ? "visible" : "none" } },
     ],
   };
 }

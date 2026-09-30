@@ -86,14 +86,14 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
             <div className="zone-result-summary"><span>Votos nominais</span><strong>{formatNumber(detail.votosNominais)}</strong></div>
             <div className="table-wrap">
               <table className="zone-results-table">
-                <thead><tr><th>Resultado</th><th>Partido</th><th>Votos</th><th>% nominais</th></tr></thead>
+               <thead><tr><th>Resultado</th><th>Partido</th><th>Votos</th><th>% nominais</th></tr></thead>
                 <tbody>
                   {results.map((item, index) => (
                     <tr key={item.id}>
-                      <td><span className="zone-rank">{String(index + 1).padStart(2, "0")}</span><span className="zone-candidate">{item.nome}</span><small className="zone-candidate-number">nº {item.numero}</small></td>
-                      <td>{item.partido}</td>
-                      <td>{formatNumber(item.votos)}</td>
-                      <td><div className="zone-share"><span>{formatPct(item.percentual)}</span><i style={{ width: `${Math.min(item.percentual, 100)}%` }} /></div></td>
+                      <td data-label="Candidata ou candidato"><span className="zone-rank">{String(index + 1).padStart(2, "0")}</span><span className="zone-candidate">{item.nome}</span><small className="zone-candidate-number">nº {item.numero}</small></td>
+                      <td data-label="Partido">{item.partido}</td>
+                      <td data-label="Votos">{formatNumber(item.votos)}</td>
+                      <td data-label="Votos nominais"><div className="zone-share"><span>{formatPct(item.percentual)}</span><i style={{ width: `${Math.min(item.percentual, 100)}%` }} /></div></td>
                     </tr>
                   ))}
                   {results.length === 0 && <tr><td colSpan={4} className="table-empty">Nenhum resultado corresponde à busca.</td></tr>}
@@ -104,16 +104,16 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
         ) : (
           <div className="table-wrap zone-locations-wrap">
             <table>
-              <thead><tr><th>Local de votação</th><th>Região</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
+               <thead><tr><th>Local de votação</th><th>Região</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
               <tbody>
                 {locations.map((item) => (
                   <tr key={item.id}>
-                    <td><strong>{item.nome}</strong><small className="zone-candidate-number">{item.bairro} · local {item.local}</small></td>
-                    <td>{item.regiao}</td>
-                    <td>{item.secoes ? formatNumber(item.secoes) : "—"}</td>
-                    <td>{formatNumber(item.aptos)}</td>
-                    <td>{formatPct(item.aptos ? (item.abstencoes / item.aptos) * 100 : 0)}</td>
-                    <td>{item.lider}<small className="zone-candidate-number">{formatNumber(item.votosLider)} votos · {formatPct(item.percentualLider)}</small></td>
+                     <td data-label="Local"><strong>{item.nome}</strong><small className="zone-candidate-number">{item.bairro} · local {item.local}</small></td>
+                     <td data-label="Região">{item.regiao}</td>
+                     <td data-label="Seções">{item.secoes ? formatNumber(item.secoes) : "—"}</td>
+                     <td data-label="Aptos">{formatNumber(item.aptos)}</td>
+                     <td data-label="Abstenção">{formatPct(item.aptos ? (item.abstencoes / item.aptos) * 100 : 0)}</td>
+                     <td data-label="Líder nominal">{item.lider}<small className="zone-candidate-number">{formatNumber(item.votosLider)} votos · {formatPct(item.percentualLider)}</small></td>
                   </tr>
                 ))}
                 {locations.length === 0 && <tr><td colSpan={6} className="table-empty">Nenhum local corresponde à busca.</td></tr>}

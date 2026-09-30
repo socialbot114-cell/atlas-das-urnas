@@ -24,6 +24,8 @@ export function readUrlState(): UrlState {
   const view = params.get("vista") as AtlasView;
   const metric = params.get("metrica") as Metric;
   const mapMode = params.get("camada") as MapMode;
+  let storedTheme: string | null = null;
+  try { storedTheme = window.localStorage.getItem("tema"); } catch { /* Storage can be unavailable in restricted browser contexts. */ }
   return {
     view: views.includes(view) ? view : "panorama",
     uf: params.get("uf") === "SP" ? "SP" : "DF",
@@ -35,11 +37,16 @@ export function readUrlState(): UrlState {
     metric: metrics.includes(metric) ? metric : "share",
     mapMode: modes.includes(mapMode) ? mapMode : "ambos",
     zone: number(params.get("zona")),
-    theme: params.get("tema") === "dark" || (!params.has("tema") && window.localStorage.getItem("tema") === "dark") ? "dark" : "light",
+    theme: params.get("tema") === "dark" || (!params.has("tema") && storedTheme === "dark") ? "dark" : "light",
   };
 }
 
 export function writeUrlState(state: UrlState) {
+  const next = urlForState(state);
+  if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.replaceState(null, "", next);
+}
+
+export function urlForState(state: UrlState) {
   const params = new URLSearchParams();
   if (state.view !== "panorama") params.set("vista", state.view);
   if (state.uf !== "DF") params.set("uf", state.uf);
@@ -52,6 +59,5 @@ export function writeUrlState(state: UrlState) {
   if (state.mapMode !== "ambos") params.set("camada", state.mapMode);
   if (state.zone != null) params.set("zona", String(state.zone));
   if (state.theme === "dark") params.set("tema", "dark");
-  const next = `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`;
-  if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.replaceState(null, "", next);
+  return `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`;
 }
