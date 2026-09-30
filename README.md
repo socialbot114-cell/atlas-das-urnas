@@ -35,6 +35,8 @@ Os dados processados, simplificados e necessários ao site ficam em `public/data
 ```bash
 npm run test:data
 npm run build
+npx playwright install chromium
+npm run test:e2e
 npm run preview
 ```
 
@@ -64,3 +66,5 @@ Os dados eleitorais do TSE têm licença Creative Commons Atribuição. Consulte
 Framework preset: Vite · Build: `npm run build` · Output: `dist`. Os artefatos são arquivos JSON estáticos, sem necessidade de servidor ou variáveis secretas.
 
 O build também publica os dois módulos worker necessários ao MapLibre para que o mapa interativo funcione em produção.
+
+O projeto está conectado ao repositório privado do GitHub; novos commits em `main` disparam uma implantação de produção na Vercel.
