@@ -49,7 +49,7 @@ test("pesquisa zona e RA e abre o modal de microdados da zona", async ({ page })
 
   await search.fill("RA Taguatinga");
   await page.getByRole("button", { name: /Taguatinga/ }).first().click();
-  await expect(page.locator(".reading")).toContainText("Taguatinga");
+  await expect(page.locator(".context-bar")).toContainText("Taguatinga");
 });
 
 test("layout mobile não ultrapassa a largura da tela", async ({ page }) => {
@@ -61,4 +61,56 @@ test("layout mobile não ultrapassa a largura da tela", async ({ page }) => {
     document: document.documentElement.scrollWidth,
   }));
   expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+});
+
+test("vistas compartilham filtros, comparação e URL podem ser restauradas", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Território/ }).click();
+  await expect(page.getByRole("heading", { name: "Do maior para o menor" })).toBeVisible();
+  await page.getByRole("button", { name: /Taguatinga.*aptos/ }).first().click();
+  await expect(page.locator(".reading")).toContainText("Taguatinga");
+  await expect(page).toHaveURL(/vista=territorio.*ra=/);
+
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Comparar/ }).click();
+  await expect(page.getByRole("heading", { name: "Dois candidatos, lado a lado." })).toBeVisible();
+  await expect(page.locator(".comparison-card")).toHaveCount(2);
+  const url = page.url();
+  await page.reload();
+  await expect(page).toHaveURL(url);
+  await expect(page.getByRole("heading", { name: "Dois candidatos, lado a lado." })).toBeVisible();
+  await expect(page.locator(".context-bar")).toContainText("Taguatinga");
+  expect(errors).toEqual([]);
+});
+
+test("zona de SP é selecionada por município e funciona no mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "São Paulo" }).click();
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Zonas e locais/ }).click();
+  await page.getByLabel("Escolha um município de São Paulo").selectOption({ label: "São Paulo" });
+  await expect(page.getByRole("heading", { name: "Zonas eleitorais" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Zonas com maior abstenção" })).toBeVisible();
+  await expect(page.locator(".zone-row").first()).toContainText("Zona");
+  await page.locator(".zone-row .zone-open").first().click();
+  await expect(page.getByRole("dialog", { name: /Zona/ })).toBeVisible();
+  await page.getByRole("dialog").getByRole("tab", { name: "Locais de votação" }).click();
+  await expect(page.getByRole("dialog").getByRole("columnheader", { name: "Local de votação" })).toBeVisible();
+  const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
+  expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+});
+
+test("não apresenta votos parciais por local como resultado completo", async ({ page }) => {
+  await page.goto("/?vista=zonas");
+  await page.getByLabel("Cargo").selectOption("Deputado Federal");
+  const search = page.getByPlaceholder("Candidato, município, RA, zona ou local");
+  await search.fill("RA Taguatinga");
+  await page.getByRole("button", { name: /Taguatinga/ }).first().click();
+  await expect(page.getByText(/O cruzamento RA × zona para este cargo/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Zonas eleitorais" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Recorte:.*ver tudo/ }).click();
+  await expect(page.getByRole("heading", { name: "Zonas eleitorais" })).toBeVisible();
+  await page.locator(".zone-row .zone-open").first().click();
+  await expect(page.getByRole("dialog").getByText(/resultado de candidatos está consolidado para a zona/)).toBeVisible();
 });

@@ -73,7 +73,7 @@ export function buildZoneDetail(input: {
         aptos: point.aptos,
         comparecimento: point.comp,
         abstencoes: point.abs,
-        candidateVotes: point.votos[input.cargo] ?? [],
+        candidateVotes: ["Presidente", "Governador", "Senador"].includes(input.cargo) ? point.votos[input.cargo] ?? [] : [],
         nominalIds,
         candidates,
       }))

@@ -1,23 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ZoneDetail } from "../lib/zone-detail";
 import { formatNumber, formatPct, fold } from "../lib/format";
 
 export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null; onClose: () => void }) {
   const [tab, setTab] = useState<"resultado" | "locais">("resultado");
   const [search, setSearch] = useState("");
+  const panel = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!detail) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.current?.querySelector<HTMLButtonElement>(".modal-close")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      if (event.key !== "Tab" || !panel.current) return;
+      const controls = [...panel.current.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")];
+      if (!controls.length) return;
+      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls[controls.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === controls[controls.length - 1]) { event.preventDefault(); controls[0].focus(); }
     };
     document.addEventListener("keydown", onKeyDown);
     document.body.classList.add("modal-open");
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.classList.remove("modal-open");
+      previous?.focus();
     };
-  }, [detail, onClose]);
+  }, [detail?.zona, detail?.uf, onClose]);
+
+  useEffect(() => { setTab("resultado"); setSearch(""); }, [detail?.zona, detail?.uf]);
 
   const results = useMemo(() => {
     if (!detail) return [];
@@ -36,7 +47,7 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
 
   return (
     <div className="zone-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="zone-modal" role="dialog" aria-modal="true" aria-labelledby="zone-modal-title">
+      <section ref={panel} className="zone-modal" role="dialog" aria-modal="true" aria-labelledby="zone-modal-title">
         <header className="zone-modal-header">
           <div>
             <p className="eyebrow">Microdados agregados · {detail.territorio}</p>

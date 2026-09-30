@@ -2,7 +2,9 @@
 
 Dashboard de exploração dos boletins de urna do primeiro turno de 2022 para o Distrito Federal e São Paulo. Aplicação estática em React + TypeScript + Vite, com dados agregados do TSE, busca textual, gráficos interativos e mapas.
 
-A busca também aceita `RA Taguatinga` e `Zona 15`. A tabela de zonas abre um modal com ranking do cargo selecionado e detalhamento por local de votação, com comparecimento, abstenção e candidato líder.
+A navegação oferece quatro vistas: **Panorama**, **Território**, **Comparar** e **Zonas e locais**. UF, cargo e recorte são compartilhados entre vistas e codificados na URL para que uma análise possa ser aberta diretamente. A busca aceita `RA Taguatinga` e `Zona 15` (em SP, a zona é identificada junto do município). A tabela de zonas abre o resultado agregado e os locais de votação.
+
+Na vista Comparar, os candidatos são apresentados em votos nominais e participação; diferenças de participação são expressas em pontos percentuais. No mapa, a escala de votos absolutos é numérica. Os locais de SP têm votação completa por candidato no arquivo público somente para presidente; no DF, para presidente, governador e senador. Para os demais cargos, o calor representa comparecimento ou abstenção e a legenda informa isso. Os resultados agregados por zona e território continuam disponíveis para todos os cargos.
 
 ## Executar localmente
 

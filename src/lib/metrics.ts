@@ -1,4 +1,4 @@
-import type { Candidato, Catalog, DfData, Metric, Municipio, Ponto, RaVotes, Uf, VoteFile, Zona } from "../types";
+import type { Candidato, Catalog, DfData, Metric, Municipio, Ponto, RaVotes, SpPoint, Uf, VoteFile, Zona } from "../types";
 import { titleCase } from "./format";
 
 export interface RankRow {
@@ -86,6 +86,7 @@ export function buildView(input: {
   votes: VoteFile;
   zonas: Zona[];
   df: DfData;
+  spPoints?: SpPoint[];
   raVotes: RaVotes;
   uf: Uf;
   cargo: string;
@@ -348,6 +349,7 @@ function radarFor(turnout: { aptos: number; comp: number; abs: number }, nominal
 
 function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Candidato>, nominalIds: Set<number>, zoneIndex: Map<string, number>) {
   if (input.ra != null) {
+    if (!["Presidente", "Governador", "Senador"].includes(input.cargo)) return [];
     const grouped = new Map<number, { aptos: number; comp: number; abs: number; sec: number; locais: number; candidates: Map<number, number> }>();
     for (const point of input.df.pontos) {
       if (point.ra !== input.ra) continue;
@@ -397,8 +399,8 @@ function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Cand
           leader = titleCase(byId.get(id)?.nome ?? "—");
         }
       }
-      const places = input.uf === "DF" ? input.df.pontos.filter((point) => point.zona === item.zona) : [];
-      const regionNames = [...new Set(places.flatMap((point) => point.ra == null ? [] : [titleCase(input.df.ras[point.ra]?.nome ?? "")]))];
+       const places = input.uf === "DF" ? input.df.pontos.filter((point) => point.zona === item.zona) : input.spPoints?.filter((point) => point.mun === item.mun && point.zona === item.zona) ?? [];
+       const regionNames = [...new Set(input.df.pontos.filter((point) => point.zona === item.zona).flatMap((point) => point.ra == null ? [] : [titleCase(input.df.ras[point.ra]?.nome ?? "")]))];
       const municipality = input.catalog.municipios.find((entry) => entry.i === item.mun);
       const territories = input.uf === "DF" ? regionNames : [titleCase(municipality?.nome ?? "")];
       return { zona: item.zona, aptos: item.aptos, comp: item.comp, abs: item.abs, sec: item.sec, lider: leader, votos, regioes: territories, locais: places.length };
@@ -430,13 +432,13 @@ export function searchAll(catalog: Catalog, df: DfData, zonas: Zona[], query: st
       if (item.zona !== number) return false;
       const municipality = catalog.municipios.find((entry) => entry.i === item.mun);
       if (!municipality || municipality.uf !== uf) return false;
-      return uf === "DF" || (munId != null && item.mun === munId);
+       return uf === "DF" || munId == null || item.mun === munId;
     });
     return matches.slice(0, 12).map((item) => {
       const municipality = catalog.municipios.find((entry) => entry.i === item.mun);
       return {
         kind: "Zona eleitoral",
-        label: `Zona ${item.zona}`,
+         label: `Zona ${item.zona}${uf === "SP" ? ` · ${titleCase(municipality?.nome ?? "")}` : ""}`,
         hint: `${item.sec} seções · ${municipality?.uf ?? uf} · ${titleCase(municipality?.nome ?? "")}`,
         uf,
         munId: item.mun,
