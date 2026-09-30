@@ -10,6 +10,10 @@ Na primeira visita, uma introdução apresenta o recorte eleitoral, as fontes, o
 
 Na vista Comparar, os candidatos são apresentados em votos nominais e participação; diferenças de participação são expressas em pontos percentuais. No mapa, a escala de votos absolutos é numérica. Os locais de SP têm votação completa por candidato no arquivo público somente para presidente; no DF, para presidente, governador e senador. Para os demais cargos, o calor representa comparecimento ou abstenção e a legenda informa isso. Os resultados agregados por zona e território continuam disponíveis para todos os cargos.
 
+## Analytics
+
+Swetrix registra visualizações da Home e das vistas pela rota `vista`, além de eventos agregados de navegação, busca, seleção territorial, comparação e abertura de detalhes locais. Os eventos não incluem texto pesquisado, candidato escolhido, nome de local ou número da zona. Configure funis no Swetrix com eventos como `home_shortcut_clicked`, `search_result_selected`, `map_region_selected`, `zone_detail_opened` e `zone_locations_opened`. A instalação respeita o sinal DNT; sessões são estimadas automaticamente pelo Swetrix sem cookies ou IDs persistentes próprios do Atlas.
+
 ## Executar localmente
 
 Requer Node.js 20+ e Python 3.10+.

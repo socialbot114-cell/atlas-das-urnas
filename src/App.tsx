@@ -7,6 +7,7 @@ import { fold, formatNumber, formatPct, titleCase } from "./lib/format";
 import { loadBase, loadGeo, loadSpPoints, loadVotes } from "./lib/load";
 import { buildView, cargosFor, searchAll, type View } from "./lib/metrics";
 import { buildZoneDetail } from "./lib/zone-detail";
+import { trackSwetrixEvent } from "./lib/analytics";
 import { readUrlState, urlForState, writeUrlState } from "./lib/url-state";
 import type { AtlasView, Catalog, DfData, Meta, Metric, MapMode, RaVotes, SpPoint, Theme, Uf, VoteFile, Zona } from "./types";
 
@@ -44,6 +45,7 @@ export function App() {
   const [zoneSort, setZoneSort] = useState<"zona" | "abstencao" | "aptos">("zona");
   const [zoneModal, setZoneModal] = useState<number | null>(initial.zone);
   const closeZone = useCallback(() => setZoneModal(null), []);
+  const trackedZone = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState("");
@@ -61,6 +63,11 @@ export function App() {
   useEffect(() => {
     writeUrlState({ view: atlasView, uf, cargo, munId, ra, candId, compareId, metric, mapMode, zone: zoneModal, theme });
   }, [atlasView, uf, cargo, munId, ra, candId, compareId, metric, mapMode, zoneModal, theme]);
+
+  useEffect(() => {
+    if (!welcomeOpen) return;
+    trackSwetrixEvent("onboarding_opened");
+  }, [welcomeOpen]);
 
   useEffect(() => {
     const restore = () => {
@@ -132,6 +139,16 @@ export function App() {
     if (!base || !votes || votesCargo !== cargo || zoneModal == null || (uf === "SP" && munId == null) || (uf === "DF" && ra != null && !["Presidente", "Governador", "Senador"].includes(cargo))) return null;
     return buildZoneDetail({ catalog: base.catalog, df: base.df, spPoints, votes, zonas: base.zonas, uf, zona: zoneModal, cargo, ra, munId });
   }, [base, votes, votesCargo, spPoints, zoneModal, uf, cargo, ra, munId]);
+  useEffect(() => {
+    if (!zoneDetail) {
+      trackedZone.current = null;
+      return;
+    }
+    const key = `${zoneDetail.uf}:${zoneDetail.zona}:${zoneDetail.cargo}:${zoneDetail.territorio}`;
+    if (trackedZone.current === key) return;
+    trackedZone.current = key;
+    trackSwetrixEvent("zone_detail_opened");
+  }, [zoneDetail]);
   const filteredZones = view?.zones.filter((item) => {
     const needle = zoneQuery.trim().toLocaleLowerCase("pt-BR");
     return !needle || String(item.zona).includes(needle) || item.lider.toLocaleLowerCase("pt-BR").includes(needle) || item.regioes.some((region) => region.toLocaleLowerCase("pt-BR").includes(needle));
@@ -229,6 +246,7 @@ export function App() {
     }
     const nextUrl = urlForState({ view: next, uf, cargo, munId, ra, candId, compareId, metric, mapMode, zone: zoneModal, theme });
     window.history.pushState(null, "", nextUrl);
+    trackSwetrixEvent("navigation_view_selected", { view: next });
     setAtlasView(next);
     setMobileSearchOpen(false);
     setMunicipalityPickerOpen(false);
@@ -236,6 +254,8 @@ export function App() {
   }
 
   function chooseSearchResult(item: (typeof results)[number]) {
+    const resultType = item.candId != null ? "candidate" : item.zone != null ? "zone" : item.ra != null ? "region" : item.munId != null ? "municipality" : "local";
+    trackSwetrixEvent("search_result_selected", { result_type: resultType });
     setUf(item.uf);
     setCargo(item.cargo ?? cargo);
     setCandId(item.candId ?? null);
@@ -260,15 +280,31 @@ export function App() {
   const closeMobileSearch = useCallback(() => { setMobileSearchOpen(false); setMobileSearch(""); setQuery(""); }, []);
   const closeMunicipalityPicker = useCallback(() => { setMunicipalityPickerOpen(false); setMunicipalityQuery(""); }, []);
   const closeCandidatePicker = useCallback(() => { setCandidatePickerTarget(null); setCandidateQuery(""); }, []);
-  const finishWelcome = useCallback(() => { markWelcomeComplete(); setWelcomeOpen(false); }, []);
+  const finishWelcome = useCallback((reason: "completed" | "skipped") => { markWelcomeComplete(); trackSwetrixEvent(`onboarding_${reason}`); setWelcomeOpen(false); }, []);
+
+  function openMobileSearch(source: "home" | "search") {
+    trackSwetrixEvent("search_opened", { source });
+    setMobileSearch(query);
+    setMobileSearchOpen(true);
+  }
+
+  function chooseCargo(next: string) {
+    if (next !== cargo) trackSwetrixEvent("cargo_filter_changed");
+    setCargo(next);
+    setCandId(null);
+    setCompareId(null);
+    setPartido(null);
+  }
 
   function chooseComparisonCandidate(id: number) {
+    trackSwetrixEvent("comparison_candidate_selected", { slot: candidatePickerTarget ?? "unknown" });
     if (candidatePickerTarget === "first") setCandId(id);
     else setCompareId(id);
     closeCandidatePicker();
   }
 
   function chooseUf(next: Uf) {
+    if (next !== uf) trackSwetrixEvent("state_filter_changed");
     setUf(next);
       setMunId(null);
       setRa(null);
@@ -287,12 +323,14 @@ export function App() {
     }
     if (key.startsWith("ra-")) {
       const index = Number(key.slice(3));
+      if (ra !== index) trackSwetrixEvent("map_region_selected", { area_type: "administrative_region" });
       setRa((current) => (current === index ? null : index));
       setMunId(null);
       setZoneQuery("");
       return;
     }
     const index = Number(key.slice(4));
+    if (munId !== index) trackSwetrixEvent("map_region_selected", { area_type: "municipality" });
     setMunId((current) => (current === index ? null : index));
     setRa(null);
     setZoneQuery("");
@@ -334,13 +372,13 @@ export function App() {
           ))}
         </nav>
         <section className="toolbar">
-          <label>Cargo<select value={cargo} onChange={(event) => { setCargo(event.target.value); setCandId(null); setCompareId(null); setPartido(null); }}>{cargosFor(base.catalog, uf).map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Cargo<select value={cargo} onChange={(event) => chooseCargo(event.target.value)}>{cargosFor(base.catalog, uf).map((item) => <option key={item}>{item}</option>)}</select></label>
           {(atlasView === "panorama" || atlasView === "territorio") && <label>Mapa<select value={metric} onChange={(event) => setMetric(event.target.value as Metric)}>{METRICS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
           {(atlasView === "panorama" || atlasView === "territorio") && <div className="segment" role="group" aria-label="Camadas do mapa">
             {([["ambos", "Mapa + calor"], ["regioes", "Regiões"], ["calor", "Calor"]] as [MapMode, string][]).map(([id, label]) => <button key={id} aria-pressed={mapMode === id} onClick={() => setMapMode(id)}>{label}</button>)}
           </div>}
           <label className="search">Busca
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Candidato, município, RA, zona ou local" />
+            <input value={query} onFocus={() => trackSwetrixEvent("search_opened", { source: "search_field" })} onChange={(event) => setQuery(event.target.value)} placeholder="Candidato, município, RA, zona ou local" />
             {results.length > 0 && (
               <ul className="results">
                 {results.map((item, index) => (
@@ -355,11 +393,11 @@ export function App() {
             )}
           </label>
         </section>
-        <button className="mobile-search-launch" onClick={() => { setMobileSearch(query); setMobileSearchOpen(true); }}><SearchIcon /><span>Buscar candidatos, cidades, zonas...</span><kbd>⌕</kbd></button>
+        <button className="mobile-search-launch" onClick={() => openMobileSearch("search")}><SearchIcon /><span>Buscar candidatos, cidades, zonas...</span><kbd>⌕</kbd></button>
         <details className="mobile-options">
           <summary><span className="mobile-options-title">Filtros</span><span className="mobile-options-current">{cargo}{atlasView === "panorama" || atlasView === "territorio" ? ` · ${metricLabel}` : ""}</span></summary>
           <div className="mobile-options-panel">
-            <label>Cargo<select value={cargo} onChange={(event) => { setCargo(event.target.value); setCandId(null); setCompareId(null); setPartido(null); }}>{cargosFor(base.catalog, uf).map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label>Cargo<select value={cargo} onChange={(event) => chooseCargo(event.target.value)}>{cargosFor(base.catalog, uf).map((item) => <option key={item}>{item}</option>)}</select></label>
             {(atlasView === "panorama" || atlasView === "territorio") && <>
               <label>Indicador do mapa<select value={metric} onChange={(event) => setMetric(event.target.value as Metric)}>{METRICS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
               <div className="segment" role="group" aria-label="Camadas do mapa">
@@ -370,7 +408,7 @@ export function App() {
           </div>
         </details>
         <div className="context-bar"><span>{uf === "DF" ? "Distrito Federal" : "São Paulo"}</span><span>{cargo}</span>{(ra != null || munId != null) && <span>{view.scopeLabel}</span>}<button className="ghost share-link" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); window.setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); } }}>{copied ? "Link copiado ✓" : "Copiar link ↗"}</button></div>
-        {atlasView === "home" && <HomePage uf={uf} cargo={cargo} view={view} focusedCandidateId={candId} onOpen={navigateView} onSearch={() => { setMobileSearch(query); setMobileSearchOpen(true); }} />}
+        {atlasView === "home" && <HomePage uf={uf} cargo={cargo} view={view} focusedCandidateId={candId} onOpen={(next) => { trackSwetrixEvent("home_shortcut_clicked", { destination: next }); navigateView(next); }} onSearch={() => openMobileSearch("home")} />}
         {(atlasView === "panorama" || atlasView === "territorio") && <><p className="reading">{view.reading}</p>{atlasView === "panorama" && view.ranks[0] && <p className="mobile-reading"><span>RESULTADO PRINCIPAL</span><strong>{view.ranks[0].nome}</strong><span>lidera {cargo.toLocaleLowerCase("pt-BR")} em {view.scopeLabel} com {formatPct(view.ranks[0].share)} dos votos nominais.</span></p>}</>}
         {partido && <p className="chip-row"><button className="chip" onClick={() => setPartido(null)}>Partido {partido} · limpar</button></p>}
         {(ra != null || munId != null) && <p className="chip-row"><button className="chip" onClick={() => selectRegion(null)}>Recorte: {view.scopeLabel} · ver tudo</button></p>}
@@ -415,7 +453,7 @@ export function App() {
           <article className="card territory-list"><header><div><p className="eyebrow">Leitura territorial</p><h2>Do maior para o menor</h2></div></header><p className="note">Selecione uma área para atualizar todo o atlas. {metric === "votos" ? "Votos do candidato selecionado." : `${metricLabel} em percentual.`}</p>{selectedKey && <div className="territory-profile"><span>Recorte ativo · {view.scopeLabel}</span><strong>{formatNumber(view.kpis.aptos)} aptos</strong><small>{formatPct(view.kpis.aptos ? view.kpis.abs / view.kpis.aptos * 100 : 0)} de abstenção · {formatNumber(view.kpis.secoes)} seções</small></div>}<div className="territory-scroll">{[...view.regions].sort((a, b) => b.value - a.value).map((item, index) => <button key={item.key} className="territory-item" aria-pressed={item.key === selectedKey} onClick={() => selectRegion(item.key)}><span className="territory-index">{String(index + 1).padStart(2, "0")}</span><span className="territory-item-body"><strong>{item.label}</strong><small>{item.detail} · {formatNumber(item.aptos)} aptos</small><i style={{ width: `${Math.max(0, Math.min(100, item.value / regionPeak * 100))}%` }} /></span><b>{metric === "votos" ? formatNumber(item.value) : formatPct(item.value)}</b></button>)}</div></article>
         </section>}
         {atlasView === "comparar" && <section className="comparison-view"><div className="section-intro"><p className="eyebrow">Comparar · {view.scopeLabel}</p><h2>Dois candidatos, lado a lado.</h2><p>Percentuais sobre votos nominais do mesmo cargo. A diferença é expressa em pontos percentuais.</p></div>
-          <div className="comparison-controls desktop-comparison-controls"><label>Primeiro candidato<select value={activeId ?? ""} onChange={(event) => setCandId(Number(event.target.value))}>{view.ranks.map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label><label>Segundo candidato<select value={comparison?.second.id ?? ""} onChange={(event) => setCompareId(Number(event.target.value))}>{view.ranks.filter((item) => item.id !== activeId).map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label></div>
+          <div className="comparison-controls desktop-comparison-controls"><label>Primeiro candidato<select value={activeId ?? ""} onChange={(event) => { trackSwetrixEvent("comparison_candidate_selected", { slot: "first" }); setCandId(Number(event.target.value)); }}>{view.ranks.map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label><label>Segundo candidato<select value={comparison?.second.id ?? ""} onChange={(event) => { trackSwetrixEvent("comparison_candidate_selected", { slot: "second" }); setCompareId(Number(event.target.value)); }}>{view.ranks.filter((item) => item.id !== activeId).map((item) => <option key={item.id} value={item.id}>{item.nome} · {item.partido}</option>)}</select></label></div>
           <div className="mobile-comparison-pickers"><button onClick={() => setCandidatePickerTarget("first")}><small>01 · PRIMEIRO CANDIDATO</small><strong>{comparison?.first.nome ?? "Escolher candidato"}</strong><span>{comparison?.first.partido ?? "Toque para pesquisar"} <i>›</i></span></button><button onClick={() => setCandidatePickerTarget("second")}><small>02 · SEGUNDO CANDIDATO</small><strong>{comparison?.second.nome ?? "Escolher candidato"}</strong><span>{comparison?.second.partido ?? "Toque para pesquisar"} <i>›</i></span></button></div>
           {comparison ? <><div className="comparison-cards"><article className="comparison-card first"><p className="eyebrow">01 · Selecionado</p><h3>{comparison.first.nome}</h3><strong>{formatPct(comparison.first.share)}</strong><span>{formatNumber(comparison.first.votos)} votos nominais</span></article><article className="comparison-difference"><small>Diferença no recorte</small><strong>{pp(Math.abs(comparison.first.share - comparison.second.share))}</strong><span>entre as participações</span></article><article className="comparison-card second"><p className="eyebrow">02 · Comparado</p><h3>{comparison.second.nome}</h3><strong>{formatPct(comparison.second.share)}</strong><span>{formatNumber(comparison.second.votos)} votos nominais</span></article></div><article className="card wide"><header><div><p className="eyebrow">Diferença territorial</p><h2>Onde cada candidato se destaca</h2></div></header><Chart option={comparisonOption(comparison.rows, theme, comparison.first.nome, comparison.second.nome)} label="Diferença em pontos percentuais entre candidatos por território" /><p className="note">Barras positivas favorecem {comparison.first.nome}; negativas favorecem {comparison.second.nome}. Mostramos os territórios com maior diferença absoluta.</p></article></> : <p className="note">Selecione dois candidatos com votos neste recorte para comparar.</p>}
         </section>}

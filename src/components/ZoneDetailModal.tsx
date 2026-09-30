@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ZoneDetail } from "../lib/zone-detail";
 import { formatNumber, formatPct, fold } from "../lib/format";
+import { trackSwetrixEvent } from "../lib/analytics";
 
 export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null; onClose: () => void }) {
   const [tab, setTab] = useState<"resultado" | "locais">("resultado");
@@ -69,7 +70,7 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
         <div className="zone-modal-toolbar">
           <div className="segment" role="tablist" aria-label="Detalhes da zona">
             <button role="tab" aria-selected={tab === "resultado"} onClick={() => { setTab("resultado"); setSearch(""); }}>Resultado na zona</button>
-            <button role="tab" aria-selected={tab === "locais"} onClick={() => { setTab("locais"); setSearch(""); }}>Locais de votação</button>
+            <button role="tab" aria-selected={tab === "locais"} onClick={() => { trackSwetrixEvent("zone_locations_opened"); setTab("locais"); setSearch(""); }}>Locais de votação</button>
           </div>
           <label className="zone-modal-search">
             <span className="sr-only">{tab === "resultado" ? "Pesquisar candidato" : "Pesquisar local de votação"}</span>

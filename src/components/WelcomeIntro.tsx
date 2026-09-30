@@ -47,7 +47,7 @@ export function markWelcomeComplete() {
   }
 }
 
-export function WelcomeIntro({ onFinish }: { onFinish: () => void }) {
+export function WelcomeIntro({ onFinish }: { onFinish: (reason: "completed" | "skipped") => void }) {
   const [step, setStep] = useState(0);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
   const methodologyPanel = useRef<HTMLElement>(null);
@@ -86,7 +86,7 @@ export function WelcomeIntro({ onFinish }: { onFinish: () => void }) {
       <div className="welcome-shell">
         <header className="welcome-topbar">
           <div className="welcome-brand"><img src="/app-icon.svg" alt="" /><span>Atlas das Urnas</span></div>
-          <button className="welcome-skip" onClick={onFinish}>Pular introdução <span aria-hidden="true">↗</span></button>
+          <button className="welcome-skip" onClick={() => onFinish("skipped")}>Pular introdução <span aria-hidden="true">↗</span></button>
         </header>
 
         <section className="welcome-card" aria-live="polite">
@@ -103,7 +103,7 @@ export function WelcomeIntro({ onFinish }: { onFinish: () => void }) {
             </div>
             <footer className="welcome-actions">
               {step > 0 && <button className="welcome-back" onClick={() => setStep((value) => value - 1)}>Voltar</button>}
-              <button className="welcome-next" onClick={() => step === STEP_COUNT - 1 ? onFinish() : setStep((value) => value + 1)}>{step === STEP_COUNT - 1 ? "Explorar o Atlas" : "Continuar"}<span aria-hidden="true">{step === STEP_COUNT - 1 ? "↗" : "→"}</span></button>
+              <button className="welcome-next" onClick={() => step === STEP_COUNT - 1 ? onFinish("completed") : setStep((value) => value + 1)}>{step === STEP_COUNT - 1 ? "Explorar o Atlas" : "Continuar"}<span aria-hidden="true">{step === STEP_COUNT - 1 ? "↗" : "→"}</span></button>
             </footer>
           </div>
         </section>

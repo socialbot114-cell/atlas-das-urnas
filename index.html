@@ -17,6 +17,30 @@
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,520;9..144,640&family=Outfit:wght@380;500;650&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <script src="https://swetrix.org/swetrix.js" defer></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        if (!window.swetrix) return;
+        try {
+          window.swetrix.init("SHQpMQlC6hpN", {
+            apiURL: "https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/v1/log",
+            respectDNT: true,
+          });
+          window.swetrix.trackViews({ search: ["vista"] });
+          window.__atlasSwetrixReady = true;
+          window.dispatchEvent(new Event("atlas-swetrix-ready"));
+        } catch (error) {
+          console.warn("Swetrix could not be initialized", error);
+        }
+      }, { once: true });
+    </script>
+    <noscript>
+      <img
+        src="https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/log/noscript?pid=SHQpMQlC6hpN"
+        alt=""
+        referrerpolicy="no-referrer-when-downgrade"
+      />
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -327,3 +327,24 @@ test("onboarding: a tela inicial cabe em iPhones compactos sem rolagem lateral",
   const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
   expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
 });
+
+test("Swetrix inicializa pageviews da SPA e recebe eventos sem termos pesquisados", async ({ page }) => {
+  await page.route("https://swetrix.org/swetrix.js", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/javascript",
+    body: `window.__swetrixEvents=[];window.swetrix={init:(id,options)=>window.__swetrixConfig={id,options},trackViews:options=>window.__swetrixViews=options,track:event=>window.__swetrixEvents.push(event)};`,
+  }));
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => Boolean(window.__swetrixConfig && window.__swetrixViews))).toBe(true);
+  await page.getByRole("button", { name: /Compare candidatos/ }).click();
+  const search = page.getByPlaceholder("Candidato, município, RA, zona ou local");
+  await search.fill("Lula");
+  await page.getByRole("button", { name: /Lula.*Presidente/ }).first().click();
+  const tracking = await page.evaluate(() => ({ config: window.__swetrixConfig, views: window.__swetrixViews, events: window.__swetrixEvents }));
+  expect(tracking.config.id).toBe("SHQpMQlC6hpN");
+  expect(tracking.config.options.apiURL).toBe("https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/v1/log");
+  expect(tracking.config.options.respectDNT).toBe(true);
+  expect(tracking.views.search).toEqual(["vista"]);
+  expect(tracking.events.map((event) => event.ev)).toEqual(expect.arrayContaining(["home_shortcut_clicked", "navigation_view_selected", "search_opened", "search_result_selected"]));
+  expect(JSON.stringify(tracking.events)).not.toContain("Lula");
+});
