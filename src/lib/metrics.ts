@@ -54,7 +54,7 @@ export interface View {
   concentration: { nome: string; acumulado: number }[];
   stacked: { labels: string[]; series: { nome: string; dados: number[] }[] };
   radar: { indicators: { name: string; max: number }[]; atual: number[]; referencia: number[] };
-  zones: { zona: number; aptos: number; comp: number; abs: number; sec: number; lider: string; votos: number; regioes: string[]; locais: number }[];
+  zones: { zona: number; aptos: number; comp: number; abs: number; sec: number; lider: string; votos: number; votosLider: number; percentualLider: number; regioes: string[]; locais: number }[];
   selected: Candidato | null;
   scopeLabel: string;
 }
@@ -379,7 +379,7 @@ function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Cand
           lider = titleCase(byId.get(id)?.nome ?? "—");
         }
       }
-      return { zona, aptos: values.aptos, comp: values.comp, abs: values.abs, sec: values.sec, lider, votos, regioes: [titleCase(input.df.ras[input.ra!]?.nome ?? "")], locais: values.locais };
+      return { zona, aptos: values.aptos, comp: values.comp, abs: values.abs, sec: values.sec, lider, votos, votosLider: best, percentualLider: pct(best, votos), regioes: [titleCase(input.df.ras[input.ra!]?.nome ?? "")], locais: values.locais };
     }).sort((a, b) => a.zona - b.zona);
   }
   const munId = input.uf === "DF" ? input.catalog.municipios.find((item) => item.uf === "DF")?.i : input.munId;
@@ -403,7 +403,7 @@ function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Cand
        const regionNames = [...new Set(input.df.pontos.filter((point) => point.zona === item.zona).flatMap((point) => point.ra == null ? [] : [titleCase(input.df.ras[point.ra]?.nome ?? "")]))];
       const municipality = input.catalog.municipios.find((entry) => entry.i === item.mun);
       const territories = input.uf === "DF" ? regionNames : [titleCase(municipality?.nome ?? "")];
-      return { zona: item.zona, aptos: item.aptos, comp: item.comp, abs: item.abs, sec: item.sec, lider: leader, votos, regioes: territories, locais: places.length };
+       return { zona: item.zona, aptos: item.aptos, comp: item.comp, abs: item.abs, sec: item.sec, lider: leader, votos, votosLider: best, percentualLider: pct(best, votos), regioes: territories, locais: places.length };
     })
     .sort((a, b) => a.zona - b.zona);
 }

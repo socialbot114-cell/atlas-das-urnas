@@ -4,7 +4,7 @@
   "short_name": "Atlas das Urnas",
   "description": "Explore os resultados eleitorais de 2022 por território, candidato e zona eleitoral.",
   "lang": "pt-BR",
-  "start_url": "/?vista=panorama",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

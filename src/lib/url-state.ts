@@ -14,7 +14,7 @@ export interface UrlState {
   theme: Theme;
 }
 
-const views: AtlasView[] = ["panorama", "territorio", "comparar", "zonas"];
+const views: AtlasView[] = ["home", "panorama", "territorio", "comparar", "zonas"];
 const metrics: Metric[] = ["share", "votos", "abstencao", "comparecimento", "concentracao"];
 const modes: MapMode[] = ["ambos", "regioes", "calor"];
 const number = (value: string | null) => value != null && /^\d+$/.test(value) ? Number(value) : null;
@@ -27,7 +27,7 @@ export function readUrlState(): UrlState {
   let storedTheme: string | null = null;
   try { storedTheme = window.localStorage.getItem("tema"); } catch { /* Storage can be unavailable in restricted browser contexts. */ }
   return {
-    view: views.includes(view) ? view : "panorama",
+    view: views.includes(view) ? view : "home",
     uf: params.get("uf") === "SP" ? "SP" : "DF",
     cargo: params.get("cargo") || "Presidente",
     munId: number(params.get("municipio")),
@@ -48,7 +48,7 @@ export function writeUrlState(state: UrlState) {
 
 export function urlForState(state: UrlState) {
   const params = new URLSearchParams();
-  if (state.view !== "panorama") params.set("vista", state.view);
+  if (state.view !== "home") params.set("vista", state.view);
   if (state.uf !== "DF") params.set("uf", state.uf);
   if (state.cargo !== "Presidente") params.set("cargo", state.cargo);
   if (state.munId != null) params.set("municipio", String(state.munId));

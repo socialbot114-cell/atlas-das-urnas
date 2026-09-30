@@ -2,7 +2,7 @@
 
 Dashboard de exploração dos boletins de urna do primeiro turno de 2022 para o Distrito Federal e São Paulo. Aplicação estática em React + TypeScript + Vite, com dados agregados do TSE, busca textual, gráficos interativos e mapas.
 
-A navegação oferece quatro vistas: **Panorama**, **Território**, **Comparar** e **Zonas e locais**. UF, cargo e recorte são compartilhados entre vistas e codificados na URL para que uma análise possa ser aberta diretamente. A busca aceita `RA Taguatinga` e `Zona 15` (em SP, a zona é identificada junto do município). A tabela de zonas abre o resultado agregado e os locais de votação.
+A navegação oferece **Início**, **Análise**, **Território**, **Comparar** e **Zonas e locais**. A Home é a porta de entrada com atalhos; a vista Análise preserva o painel completo. UF, cargo e recorte são compartilhados entre vistas e codificados na URL para que uma análise possa ser aberta diretamente. A busca aceita `RA Taguatinga` e `Zona 15` (em SP, a zona é identificada junto do município). Em cada local disponível, o detalhe da zona mostra os dois candidatos mais votados, seus votos e sua participação nos votos nominais do local.
 
 O painel é otimizado para celular, oferece navegação fixa inferior e pode ser adicionado à tela inicial pelo menu de compartilhamento do navegador; o manifesto define o nome, o ícone e o modo de abertura do app.
 

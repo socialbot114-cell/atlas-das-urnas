@@ -329,7 +329,7 @@ export function App() {
       </header>
       <main id="conteudo">
         <nav className="view-nav" aria-label="Vistas do atlas">
-          {([["panorama", "Panorama", "O essencial"], ["territorio", "Território", "Explore o mapa"], ["comparar", "Comparar", "Dois candidatos"], ["zonas", "Zonas e locais", "Escala eleitoral"]] as [AtlasView, string, string][]).map(([id, label, hint], index) => (
+          {([["home", "Início", "Visão geral"], ["panorama", "Análise", "Painel completo"], ["territorio", "Território", "Explore o mapa"], ["comparar", "Comparar", "Dois candidatos"], ["zonas", "Zonas e locais", "Escala eleitoral"]] as [AtlasView, string, string][]).map(([id, label, hint], index) => (
             <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => navigateView(id)}><small>0{index + 1} · {hint}</small><strong>{label}</strong></button>
           ))}
         </nav>
@@ -370,6 +370,7 @@ export function App() {
           </div>
         </details>
         <div className="context-bar"><span>{uf === "DF" ? "Distrito Federal" : "São Paulo"}</span><span>{cargo}</span>{(ra != null || munId != null) && <span>{view.scopeLabel}</span>}<button className="ghost share-link" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopied(true); window.setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); } }}>{copied ? "Link copiado ✓" : "Copiar link ↗"}</button></div>
+        {atlasView === "home" && <HomePage uf={uf} cargo={cargo} view={view} focusedCandidateId={candId} onOpen={navigateView} onSearch={() => { setMobileSearch(query); setMobileSearchOpen(true); }} />}
         {(atlasView === "panorama" || atlasView === "territorio") && <><p className="reading">{view.reading}</p>{atlasView === "panorama" && view.ranks[0] && <p className="mobile-reading"><span>RESULTADO PRINCIPAL</span><strong>{view.ranks[0].nome}</strong><span>lidera {cargo.toLocaleLowerCase("pt-BR")} em {view.scopeLabel} com {formatPct(view.ranks[0].share)} dos votos nominais.</span></p>}</>}
         {partido && <p className="chip-row"><button className="chip" onClick={() => setPartido(null)}>Partido {partido} · limpar</button></p>}
         {(ra != null || munId != null) && <p className="chip-row"><button className="chip" onClick={() => selectRegion(null)}>Recorte: {view.scopeLabel} · ver tudo</button></p>}
@@ -444,13 +445,13 @@ export function App() {
               </div>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Zona</th><th>Região administrativa</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
+                  <thead><tr><th>Zona</th><th>Região administrativa</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder · % nominais</th></tr></thead>
                   <tbody>
                     {filteredZones.map((item) => <tr key={item.zona} className="zone-row" onClick={() => setZoneModal(item.zona)}>
-                      <td><button className="zone-open" onClick={(event) => { event.stopPropagation(); setZoneModal(item.zona); }}>Zona {item.zona}<span>ver detalhes ↗</span></button></td>
+                       <td><button className="zone-open" onClick={(event) => { event.stopPropagation(); setZoneModal(item.zona); }}>Zona {item.zona}<span>ver detalhes ↗</span></button></td>
                       <td>{item.regioes.length ? item.regioes.join(", ") : view.scopeLabel}</td>
                       <td>{item.locais ? formatNumber(item.locais) : "—"}</td>
-                      <td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? (item.abs / item.aptos) * 100 : 0)}</td><td>{item.lider}</td>
+                       <td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? (item.abs / item.aptos) * 100 : 0)}</td><td>{item.lider} · {formatPct(item.percentualLider)}</td>
                     </tr>)}
                     {filteredZones.length === 0 && <tr><td colSpan={7} className="table-empty">Nenhuma zona corresponde à pesquisa.</td></tr>}
                   </tbody>
@@ -463,12 +464,13 @@ export function App() {
           <article className="card wide zone-browser">
             <header className="zone-browser-header"><div><p className="eyebrow">Explorar por zona</p><h2>{munId != null || ra != null ? view.scopeLabel : "Todas as zonas"}</h2></div><button className="ghost zone-export" onClick={() => exportZonesCsv(filteredZones, `${uf}-${view.scopeLabel}`)}>Exportar</button></header>
             <div className="zone-browser-controls"><label className="zone-list-search"><span className="sr-only">Pesquisar zonas por número, região ou liderança</span><SearchIcon /><input value={zoneQuery} onChange={(event) => setZoneQuery(event.target.value)} placeholder="Buscar zona, região ou liderança" /></label><label className="zone-sort"><span className="sr-only">Ordenar zonas</span><select value={zoneSort} onChange={(event) => setZoneSort(event.target.value as typeof zoneSort)}><option value="zona">Número da zona</option><option value="abstencao">Maior abstenção</option><option value="aptos">Mais eleitores</option></select></label></div>
-            <div className="zone-card-list">{filteredZones.map((item) => <button key={`${munId ?? "df"}-${item.zona}`} className="zone-card" onClick={() => setZoneModal(item.zona)} aria-label={`Abrir zona ${item.zona}, ${item.aptos} aptos, ${formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)} de abstenção`}>
+            <p className="zone-share-note">O percentual mostra a participação do líder sobre os votos nominais da zona.</p>
+            <div className="zone-card-list">{filteredZones.map((item) => <button key={`${munId ?? "df"}-${item.zona}`} className="zone-card" onClick={() => setZoneModal(item.zona)} aria-label={`Abrir zona ${item.zona}. Líder nominal ${item.lider}, ${formatPct(item.percentualLider)} dos votos nominais com ${formatNumber(item.votosLider)} votos. ${formatNumber(item.aptos)} aptos, ${formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)} de abstenção`}>
               <span className="zone-card-top"><span className="zone-card-title"><strong>Zona {item.zona}</strong><small>{item.regioes.length ? item.regioes.join(" · ") : view.scopeLabel}</small></span><span className="zone-chevron" aria-hidden="true">›</span></span>
-              <span className="zone-card-metrics"><span><small>Eleitores</small><strong>{formatNumber(item.aptos)}</strong></span><span><small>Seções</small><strong>{formatNumber(item.sec)}</strong></span><span><small>Abstenção</small><strong>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</strong></span></span>
-              <span className="zone-card-leader"><span>Líder nominal</span><strong>{item.lider}</strong><small>{formatNumber(item.votos)} votos nominais</small></span>
+              <span className="zone-card-leader"><span className="zone-card-leader-label">Líder nominal</span><span className="zone-card-leader-result"><strong className="zone-card-leader-name">{item.lider}</strong><span className="zone-card-leader-share"><b>{formatPct(item.percentualLider)}</b><small>{formatNumber(item.votosLider)} votos</small></span></span><span className="zone-card-leader-track" role="progressbar" aria-label={`${item.lider}: ${formatPct(item.percentualLider)} dos votos nominais`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.percentualLider}><i style={{ width: `${Math.min(100, Math.max(0, item.percentualLider))}%` }} /></span><small className="zone-card-denominator">de {formatNumber(item.votos)} votos nominais na zona</small></span>
+              <span className="zone-card-metrics"><span><small>Eleitores aptos</small><strong>{formatNumber(item.aptos)}</strong></span><span><small>Seções</small><strong>{formatNumber(item.sec)}</strong></span><span><small>Abstenção</small><strong>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</strong></span></span>
             </button>)}{filteredZones.length === 0 && <p className="zone-empty">Nenhuma zona encontrada. Experimente outro número ou região.</p>}</div>
-            <div className="desktop-zone-table table-wrap"><table><thead><tr><th>Zona</th><th>Região</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead><tbody>{filteredZones.map((item) => <tr key={`table-${munId ?? "df"}-${item.zona}`}><td><button className="zone-open" onClick={() => setZoneModal(item.zona)}>Zona {item.zona}<span>ver detalhes ↗</span></button></td><td>{item.regioes.join(", ") || view.scopeLabel}</td><td>{item.locais || "—"}</td><td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</td><td>{item.lider}</td></tr>)}</tbody></table></div>
+            <div className="desktop-zone-table table-wrap"><table><thead><tr><th>Zona</th><th>Região</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder · % nominais</th></tr></thead><tbody>{filteredZones.map((item) => <tr key={`table-${munId ?? "df"}-${item.zona}`}><td><button className="zone-open" onClick={() => setZoneModal(item.zona)}>Zona {item.zona}<span>ver detalhes ↗</span></button></td><td>{item.regioes.join(", ") || view.scopeLabel}</td><td>{item.locais || "—"}</td><td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? item.abs / item.aptos * 100 : 0)}</td><td><strong>{item.lider}</strong><small className="desktop-zone-leader-share">{formatNumber(item.votosLider)} votos · {formatPct(item.percentualLider)}</small></td></tr>)}</tbody></table></div>
           </article>
           {highAbstentionZones.length > 0 && <details className="zone-distribution-more"><summary>Ver distribuição da abstenção</summary><article className="card wide zone-distribution"><header><div><p className="eyebrow">Distribuição · {view.scopeLabel}</p><h2>Zonas com maior abstenção</h2></div></header><Chart option={zonesOption(highAbstentionZones, theme)} label="As doze zonas com maior taxa de abstenção" onSelect={(index) => setZoneModal(highAbstentionZones[index].zona)} /><p className="note">Taxa sobre eleitores aptos. Toque em uma barra para abrir a zona.</p></article></details>}
         </>}
@@ -486,7 +488,7 @@ export function App() {
         <div className="sheet-results candidate-results" aria-live="polite">{comparisonCandidates.map((item) => <button key={item.id} onClick={() => chooseComparisonCandidate(item.id)}><span className="candidate-number-badge">{item.num}</span><span><strong>{item.nome}</strong><small>{item.partido} · {formatNumber(item.votos)} votos · {formatPct(item.share)}</small></span><span className="sheet-chevron">›</span></button>)}{comparisonCandidates.length === 0 && <p className="sheet-empty">Nenhum candidato encontrado. Revise a busca.</p>}{!candidateQuery.trim() && <p className="sheet-footnote">Mostrando os 30 candidatos mais votados. Digite para buscar em toda a lista.</p>}</div>
       </MobileSheet>}
       <nav className="mobile-tabbar" aria-label="Navegação principal">
-        {([["panorama", "Início"], ["territorio", "Mapa"], ["comparar", "Comparar"], ["zonas", "Zonas"]] as [AtlasView, string][]).map(([id, label]) => <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => navigateView(id)}><ViewIcon view={id} /><span>{label}</span></button>)}
+        {([["home", "Início"], ["territorio", "Mapa"], ["comparar", "Comparar"], ["zonas", "Zonas"]] as [AtlasView, string][]).map(([id, label]) => <button key={id} aria-current={atlasView === id ? "page" : undefined} onClick={() => navigateView(id)}><ViewIcon view={id} /><span>{label}</span></button>)}
       </nav>
       <footer>
         <p>{base.meta.fonte}. Extração dos boletins em {base.meta.extracao}. Pleito em {base.meta.pleito}.</p>
@@ -497,6 +499,56 @@ export function App() {
       {lastView && !currentView && <div className="app-transition-layer" role="status" aria-live="polite"><span className="map-loading-spinner" /><strong>Atualizando resultados</strong><small>Carregando {cargo.toLocaleLowerCase("pt-BR")}</small></div>}
     </div>
   );
+}
+
+function HomePage({ uf, cargo, view, focusedCandidateId, onOpen, onSearch }: { uf: Uf; cargo: string; view: View; focusedCandidateId: number | null; onOpen: (view: AtlasView) => void; onSearch: () => void }) {
+  const candidate = focusedCandidateId == null ? view.ranks[0] : view.ranks.find((item) => item.id === focusedCandidateId) ?? view.ranks[0];
+  const isFocusedCandidate = focusedCandidateId != null && candidate?.id === focusedCandidateId;
+  const attendance = view.kpis.aptos ? (view.kpis.comp / view.kpis.aptos) * 100 : 0;
+  return <section className="home-page">
+    <section className="home-hero">
+      <div className="home-hero-copy">
+        <p className="home-kicker"><span /> ATLAS ELEITORAL <i>·</i> 1º TURNO 2022</p>
+        <h2>O voto tem<br /><em>um território.</em></h2>
+        <p>Explore resultados de {uf === "DF" ? "Brasília e suas regiões" : "São Paulo e seus municípios"}. Compare candidaturas, encontre uma zona e veja os dados por local de votação.</p>
+        <div className="home-hero-actions">
+          <button className="home-action-primary" onClick={() => onOpen("territorio")}>Explorar o mapa <span aria-hidden="true">↗</span></button>
+          <button className="home-action-secondary" onClick={onSearch}><SearchIcon /> Buscar dados</button>
+        </div>
+        <div className="home-scope-stamp"><span>{uf === "DF" ? "DISTRITO FEDERAL" : "ESTADO DE SÃO PAULO"}</span><b>{cargo}</b></div>
+      </div>
+      <HomeArtwork uf={uf} />
+    </section>
+
+    <section className="home-snapshot" aria-label="Resumo eleitoral">
+      <article className="home-leader-tile">
+        <span className="home-tile-label">{isFocusedCandidate ? "CANDIDATO EM FOCO" : "LÍDER NOMINAL"} · {view.scopeLabel.toLocaleUpperCase("pt-BR")}</span>
+        {candidate ? <><strong className="home-leader-name">{candidate.nome}</strong><span className="home-leader-share">{formatPct(candidate.share)}</span><small>{formatNumber(candidate.votos)} votos nominais para {cargo.toLocaleLowerCase("pt-BR")}</small></> : <><strong className="home-leader-name">Resultado indisponível</strong><small>Não há votos nominais neste recorte.</small></>}
+      </article>
+      <article className="home-stat-tile"><span className="home-tile-label">ELEITORES APTOS</span><strong>{formatNumber(view.kpis.aptos)}</strong><small>{formatNumber(view.kpis.secoes)} seções apuradas</small></article>
+      <article className="home-stat-tile"><span className="home-tile-label">COMPARECIMENTO</span><strong>{formatPct(attendance)}</strong><small>{formatNumber(view.kpis.comp)} eleitoras e eleitores</small></article>
+    </section>
+
+    <section className="home-explore">
+      <header><div><p className="eyebrow">ESCOLHA SEU PRÓXIMO PASSO</p><h3>O que você quer descobrir?</h3></div><button className="home-search-link" onClick={onSearch}><SearchIcon /><span>Buscar no Atlas</span><b aria-hidden="true">↗</b></button></header>
+      <div className="home-shortcuts">
+        <button className="home-shortcut shortcut-map" onClick={() => onOpen("territorio")}><span className="shortcut-icon"><ViewIcon view="territorio" /></span><span className="shortcut-copy"><strong>Explore o território</strong><small>Toque numa região para ver o resultado e avançar até as zonas.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></button>
+        <button className="home-shortcut shortcut-compare" onClick={() => onOpen("comparar")}><span className="shortcut-icon"><ViewIcon view="comparar" /></span><span className="shortcut-copy"><strong>Compare candidatos</strong><small>Veja a diferença de votos e participação entre duas candidaturas.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></button>
+        <button className="home-shortcut shortcut-zones" onClick={() => onOpen("zonas")}><span className="shortcut-icon"><ViewIcon view="zonas" /></span><span className="shortcut-copy"><strong>Encontre uma zona</strong><small>Pesquise locais, seções, eleitorado e os dois mais votados.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></button>
+        <button className="home-shortcut shortcut-analysis" onClick={() => onOpen("panorama")}><span className="shortcut-icon"><ViewIcon view="panorama" /></span><span className="shortcut-copy"><strong>Abra a análise completa</strong><small>Gráficos, ranking e outros indicadores eleitorais.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></button>
+      </div>
+    </section>
+    <p className="home-source-note">Dados oficiais do TSE · Resultados agregados · Sem cadastro</p>
+  </section>;
+}
+
+function HomeArtwork({ uf }: { uf: Uf }) {
+  return <div className="home-artwork" aria-hidden="true">
+    <div className="home-artwork-glow" />
+    <svg viewBox="0 0 480 360"><path d="m101 88 51-41 67 14 42-26 59 40 66-10 31 55-22 45 18 54-52 26-11 62-63-17-40 28-52-30-48 8-29-47-53-9-18-46 29-41-12-48z"/><path d="M88 226c50-53 91-48 130-4s72 34 106-21 68-64 108-29"/><circle cx="88" cy="226" r="7"/><circle cx="218" cy="222" r="7"/><circle cx="324" cy="201" r="7"/><circle cx="432" cy="172" r="7"/></svg>
+    <span className="home-art-tag">{uf === "DF" ? "33 regiões administrativas" : "645 municípios"}</span>
+    <span className="home-art-caption">RESULTADO · TERRITÓRIO · PARTICIPAÇÃO</span>
+  </div>;
 }
 
 function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -550,7 +602,8 @@ function ThemeIcon({ theme }: { theme: Theme }) {
 
 function ViewIcon({ view }: { view: AtlasView }) {
   const paths: Record<AtlasView, ReactNode> = {
-    panorama: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
+    home: <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
+    panorama: <><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M15 14h5m-5 4h5"/></>,
     territorio: <><path d="M3 6.5 9 3l6 3 6-3v14.5L15 21l-6-3-6 3z" /><path d="M9 3v15m6-12v15" /></>,
     comparar: <><path d="M4 19V9m8 10V4m8 15v-7" /><path d="M2 19h20" /></>,
     zonas: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 8h8M8 12h8m-8 4h5" /></>,
@@ -599,10 +652,10 @@ function exportCsv(rows: { nome: string; num: string; partido: string; votos: nu
   URL.revokeObjectURL(link.href);
 }
 
-function exportZonesCsv(rows: { zona: number; regioes: string[]; locais: number; sec: number; aptos: number; comp: number; abs: number; lider: string }[], name: string) {
-  const header = "zona,regioes,locais,secoes,aptos,comparecimento,abstencoes,lider_nominal";
+function exportZonesCsv(rows: { zona: number; regioes: string[]; locais: number; sec: number; aptos: number; comp: number; abs: number; lider: string; votos: number; votosLider: number; percentualLider: number }[], name: string) {
+  const header = "zona,regioes,locais,secoes,aptos,comparecimento,abstencoes,votos_nominais,lider_nominal,votos_lider,percentual_lider_nominal";
   const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  const body = rows.map((item) => [item.zona, escape(item.regioes.join(" / ")), item.locais, item.sec, item.aptos, item.comp, item.abs, escape(item.lider)].join(","));
+  const body = rows.map((item) => [item.zona, escape(item.regioes.join(" / ")), item.locais, item.sec, item.aptos, item.comp, item.abs, item.votos, escape(item.lider), item.votosLider, item.percentualLider.toFixed(2)].join(","));
   const blob = new Blob([`\uFEFF${[header, ...body].join("\n")}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);

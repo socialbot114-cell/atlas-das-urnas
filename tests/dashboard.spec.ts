@@ -17,7 +17,9 @@ test("carrega os indicadores, alterna UF e tema e pesquisa município", async ({
   });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /O voto tem um território/ })).toBeVisible();
   await expect(page.getByText("2.206.996", { exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Território/ }).click();
   await expect(page.getByRole("heading", { name: "Regiões administrativas" })).toBeVisible();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible();
   expect((await page.request.get("/maplibre-gl-worker.mjs")).ok()).toBeTruthy();
@@ -26,6 +28,7 @@ test("carrega os indicadores, alterna UF e tema e pesquisa município", async ({
   await expect(page.getByText(/São Paulo: Jair Bolsonaro lidera presidente/)).toBeVisible();
   await expect.poll(() => spPointRequests.length).toBeGreaterThan(0);
   expect(spPointRequests).toHaveLength(1);
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Análise/ }).click();
   await expect(page.getByText("12.239.989")).toBeVisible();
 
   await page.getByRole("button", { name: "Ativar tema escuro" }).click();
@@ -55,6 +58,8 @@ test("pesquisa zona e RA e abre o modal de microdados da zona", async ({ page })
 
   await dialog.getByRole("tab", { name: "Locais de votação" }).click();
   await expect(dialog.getByRole("columnheader", { name: "Local de votação" })).toBeVisible();
+  await expect(dialog.locator(".local-candidate-row").nth(0)).toBeVisible();
+  await expect(dialog.locator(".local-candidate-row").nth(1)).toBeVisible();
   await dialog.getByRole("button", { name: "Fechar detalhes da zona" }).click();
 
   await search.fill("RA Taguatinga");
@@ -104,8 +109,12 @@ test("zona de SP é selecionada por município e funciona no mobile", async ({ p
   await page.getByRole("dialog", { name: "Escolher município" }).getByRole("button", { name: /São Paulo.*eleitores/ }).first().click();
   await expect(page.locator(".zone-browser")).toBeVisible();
   await expect(page.getByText("Ver distribuição da abstenção")).toBeVisible();
-  await expect(page.locator(".zone-card").first()).toContainText("Zona");
-  await page.locator(".zone-card").first().click();
+  const zoneCard = page.locator(".zone-card").first();
+  await expect(zoneCard).toContainText("Zona");
+  await expect(zoneCard.locator(".zone-card-leader-share b")).toHaveText(/\d+[,.]\d+%/);
+  await expect(zoneCard.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "100");
+  await expect(zoneCard.locator(".zone-card-denominator")).toContainText("votos nominais");
+  await zoneCard.click();
   await expect(page.getByRole("dialog", { name: /Zona/ })).toBeVisible();
   await expect(page.locator(".mobile-tabbar")).toBeHidden();
   await page.getByRole("dialog").getByRole("tab", { name: "Locais de votação" }).click();
@@ -136,6 +145,7 @@ test("mobile oferece navegação fixa, ajustes recolhíveis e respeita área seg
   const tabbar = page.getByRole("navigation", { name: "Navegação principal" });
   await expect(tabbar).toBeVisible();
   await expect(tabbar.getByRole("button", { name: "Início" })).toHaveAttribute("aria-current", "page");
+  await tabbar.getByRole("button", { name: "Mapa" }).click();
   await page.locator(".mobile-options summary").click();
   await expect(page.getByLabel("Indicador do mapa")).toBeVisible();
   await page.getByLabel("Indicador do mapa").selectOption("abstencao");
@@ -161,6 +171,23 @@ test("layouts compactos não criam rolagem horizontal nas quatro vistas", async 
       expect(result.page, `width ${width}, view ${label}`).toBeLessThanOrEqual(result.viewport);
     }
   }
+});
+
+test("home encaminha para mapa, comparação, zonas e mantém a análise completa", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /O voto tem um território/ })).toBeVisible();
+  await page.getByRole("button", { name: /Explore o território/ }).click();
+  await expect(page.getByRole("heading", { name: "Do maior para o menor" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Início/ }).click();
+  await page.getByRole("button", { name: /Compare candidatos/ }).click();
+  await expect(page).toHaveURL(/vista=comparar/);
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Início/ }).click();
+  await page.getByRole("button", { name: /Encontre uma zona/ }).click();
+  await expect(page.locator(".zone-browser")).toBeVisible();
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Início/ }).click();
+  await page.getByRole("button", { name: /Abra a análise completa/ }).click();
+  await expect(page).toHaveURL(/vista=panorama/);
+  await expect(page.getByRole("heading", { name: "Quem recebeu votos" })).toBeVisible();
 });
 
 test("navegação mobile mantém voltar/avançar e leva cada vista ao topo", async ({ page }) => {
@@ -190,7 +217,7 @@ test("busca mobile abre folha nativa, encontra candidato e aplica o filtro", asy
   await sheet.getByRole("button", { name: /Lula.*Presidente/ }).first().click();
   await expect(sheet).toHaveCount(0);
   await expect(page).toHaveURL(/candidato=/);
-  await expect(page.locator(".reading")).toContainText("Lula");
+  await expect(page.locator(".home-leader-name")).toContainText("Lula");
 });
 
 test("toque no mapa seleciona uma região e abre as zonas correspondentes", async ({ page }) => {

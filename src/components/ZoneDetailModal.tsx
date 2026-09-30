@@ -104,7 +104,7 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
         ) : (
           <div className="table-wrap zone-locations-wrap">
             <table>
-               <thead><tr><th>Local de votação</th><th>Região</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
+               <thead><tr><th>Local de votação</th><th>Região</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Dois mais votados</th></tr></thead>
               <tbody>
                 {locations.map((item) => (
                   <tr key={item.id}>
@@ -113,7 +113,10 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
                      <td data-label="Seções">{item.secoes ? formatNumber(item.secoes) : "—"}</td>
                      <td data-label="Aptos">{formatNumber(item.aptos)}</td>
                      <td data-label="Abstenção">{formatPct(item.aptos ? (item.abstencoes / item.aptos) * 100 : 0)}</td>
-                     <td data-label="Líder nominal">{item.lider}<small className="zone-candidate-number">{formatNumber(item.votosLider)} votos · {formatPct(item.percentualLider)}</small></td>
+                     <td data-label="Primeiro e segundo colocados">{item.resultadosDisponiveis ? <div className="local-candidate-rankings">
+                       <div className="local-candidate-row"><span className="local-candidate-rank">1</span><span><strong>{item.lider}</strong><small>{formatNumber(item.votosLider)} votos</small></span><b>{formatPct(item.percentualLider)}</b></div>
+                       {item.votosSegundo > 0 && <div className="local-candidate-row"><span className="local-candidate-rank">2</span><span><strong>{item.segundo}</strong><small>{formatNumber(item.votosSegundo)} votos</small></span><b>{formatPct(item.percentualSegundo)}</b></div>}
+                     </div> : <span className="local-results-unavailable">Votos por candidato indisponíveis neste local.</span>}</td>
                   </tr>
                 ))}
                 {locations.length === 0 && <tr><td colSpan={6} className="table-empty">Nenhum local corresponde à busca.</td></tr>}
@@ -121,7 +124,7 @@ export function ZoneDetailModal({ detail, onClose }: { detail: ZoneDetail | null
             </table>
           </div>
         )}
-        <p className="zone-modal-footnote">{detail.resultadosPorLocalDisponiveis ? "Os votos são apresentados por local e agregam as seções ali instaladas." : "O resultado de candidatos está consolidado para a zona; por local, os dados disponíveis são comparecimento e abstenção."} Percentuais usam votos nominais válidos. Comparecimento e abstenção são contados uma vez por seção.</p>
+        <p className="zone-modal-footnote">{detail.resultadosPorLocalDisponiveis ? "Por local, mostramos os dois mais votados e seus percentuais sobre os votos nominais válidos, agregados das seções ali instaladas." : "O resultado de candidatos está consolidado para a zona; por local, os dados disponíveis são comparecimento e abstenção."} Comparecimento e abstenção são contados uma vez por seção.</p>
       </section>
     </div>
   );

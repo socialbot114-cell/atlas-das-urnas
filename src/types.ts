@@ -2,7 +2,7 @@ export type Uf = "DF" | "SP";
 export type Theme = "light" | "dark";
 export type Metric = "share" | "votos" | "abstencao" | "comparecimento" | "concentracao";
 export type MapMode = "regioes" | "calor" | "ambos";
-export type AtlasView = "panorama" | "territorio" | "comparar" | "zonas";
+export type AtlasView = "home" | "panorama" | "territorio" | "comparar" | "zonas";
 
 export interface Meta {
   titulo: string;

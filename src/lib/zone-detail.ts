@@ -23,6 +23,9 @@ export interface ZoneLocalResult {
   lider: string;
   votosLider: number;
   percentualLider: number;
+  segundo: string;
+  votosSegundo: number;
+  percentualSegundo: number;
   resultadosDisponiveis: boolean;
 }
 
@@ -182,17 +185,21 @@ function buildLocal(input: {
   nominalIds: Set<number>;
   candidates: Map<number, Catalog["candidatos"][number]>;
 }): ZoneLocalResult {
-  let lider = "—";
-  let votosLider = 0;
   let votosNominais = 0;
+  const ranking: { id: number; votes: number }[] = [];
   for (const [id, votes] of input.candidateVotes) {
     if (!input.nominalIds.has(id)) continue;
     votosNominais += votes;
-    if (votes > votosLider) {
-      votosLider = votes;
-      lider = titleCase(input.candidates.get(id)?.nome ?? "—");
-    }
+    ranking.push({ id, votes });
   }
+  ranking.sort((a, b) => b.votes - a.votes);
+  const first = ranking[0];
+  const second = ranking[1];
+  const resultadosDisponiveis = ranking.length > 0;
+  const lider = resultadosDisponiveis && first ? titleCase(input.candidates.get(first.id)?.nome ?? "—") : "—";
+  const liderVotes = first?.votes ?? 0;
+  const secondName = resultadosDisponiveis && second ? titleCase(input.candidates.get(second.id)?.nome ?? "—") : "—";
+  const secondVotes = second?.votes ?? 0;
   return {
     id: input.id,
     nome: titleCase(input.nome),
@@ -204,8 +211,11 @@ function buildLocal(input: {
     comparecimento: input.comparecimento,
     abstencoes: input.abstencoes,
     lider,
-    votosLider,
-    percentualLider: votosNominais ? (votosLider / votosNominais) * 100 : 0,
-    resultadosDisponiveis: input.candidateVotes.length > 0,
+    votosLider: liderVotes,
+    percentualLider: votosNominais ? (liderVotes / votosNominais) * 100 : 0,
+    segundo: secondName,
+    votosSegundo: secondVotes,
+    percentualSegundo: votosNominais ? (secondVotes / votosNominais) * 100 : 0,
+    resultadosDisponiveis,
   };
 }
