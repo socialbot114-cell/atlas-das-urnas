@@ -2,11 +2,17 @@ import { expect, test } from "@playwright/test";
 
 test("carrega os indicadores, alterna UF e tema e pesquisa município", async ({ page }) => {
   const pageErrors: string[] = [];
+  const workerErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Worker failed to load")) workerErrors.push(message.text());
+  });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
   await expect(page.getByText("2.206.996", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Regiões administrativas" })).toBeVisible();
+  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  expect((await page.request.get("/maplibre-gl-worker.mjs")).ok()).toBeTruthy();
 
   await page.getByRole("button", { name: "São Paulo" }).click();
   await expect(page.getByText(/São Paulo: Jair Bolsonaro lidera presidente/)).toBeVisible();
@@ -21,6 +27,7 @@ test("carrega os indicadores, alterna UF e tema e pesquisa município", async ({
   await expect(page.getByText(/Mogi Mirim:/)).toBeVisible();
 
   expect(pageErrors).toEqual([]);
+  expect(workerErrors).toEqual([]);
 });
 
 test("layout mobile não ultrapassa a largura da tela", async ({ page }) => {

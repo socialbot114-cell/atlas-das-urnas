@@ -1,4 +1,4 @@
-import { Map as MapLibreMap, NavigationControl, Popup, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
+import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import type { MapMode, Theme, Uf } from "../types";
 import { formatPct } from "../lib/format";
@@ -6,6 +6,7 @@ import type { RegionRow } from "../lib/metrics";
 
 const LIGHT = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const DARK = LIGHT;
+setWorkerUrl("/maplibre-gl-worker.mjs");
 
 interface Point {
   lon: number;
