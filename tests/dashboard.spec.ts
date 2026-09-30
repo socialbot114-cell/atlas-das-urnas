@@ -343,7 +343,7 @@ test("Swetrix inicializa pageviews da SPA e recebe eventos sem termos pesquisado
   const tracking = await page.evaluate(() => ({ config: window.__swetrixConfig, views: window.__swetrixViews, events: window.__swetrixEvents }));
   expect(tracking.config.id).toBe("SHQpMQlC6hpN");
   expect(tracking.config.options.apiURL).toBe("https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/v1/log");
-  expect(tracking.config.options.respectDNT).toBe(true);
+  expect(tracking.config.options.respectDNT).toBeUndefined();
   expect(tracking.views.search).toEqual(["vista"]);
   expect(tracking.events.map((event) => event.ev)).toEqual(expect.arrayContaining(["home_shortcut_clicked", "navigation_view_selected", "search_opened", "search_result_selected"]));
   expect(JSON.stringify(tracking.events)).not.toContain("Lula");

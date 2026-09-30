@@ -12,7 +12,7 @@ Na vista Comparar, os candidatos são apresentados em votos nominais e participa
 
 ## Analytics
 
-Swetrix registra visualizações da Home e das vistas pela rota `vista`, além de eventos agregados de navegação, busca, seleção territorial, comparação e abertura de detalhes locais. Os eventos não incluem texto pesquisado, candidato escolhido, nome de local ou número da zona. Configure funis no Swetrix com eventos como `home_shortcut_clicked`, `search_result_selected`, `map_region_selected`, `zone_detail_opened` e `zone_locations_opened`. A instalação respeita o sinal DNT; sessões são estimadas automaticamente pelo Swetrix sem cookies ou IDs persistentes próprios do Atlas.
+Swetrix registra visualizações da Home e das vistas pela rota `vista`, além de eventos agregados de navegação, busca, seleção territorial, comparação e abertura de detalhes locais. Os eventos não incluem texto pesquisado, candidato escolhido, nome de local ou número da zona. Configure funis no Swetrix com eventos como `home_shortcut_clicked`, `search_result_selected`, `map_region_selected`, `zone_detail_opened` e `zone_locations_opened`. Sessões são estimadas automaticamente pelo Swetrix sem cookies ou IDs persistentes próprios do Atlas.
 
 ## Executar localmente
 
