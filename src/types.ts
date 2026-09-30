@@ -67,8 +67,8 @@ export interface Ponto {
   zona: number;
   local: number;
   ra: number | null;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   aptos: number;
   comp: number;
   abs: number;
@@ -98,11 +98,16 @@ export interface RaVotes {
 }
 
 export interface SpPoint {
-  lon: number;
-  lat: number;
+  nome: string;
+  bairro: string;
+  zona: number;
+  local: number;
+  lon: number | null;
+  lat: number | null;
   mun: number;
   aptos: number;
   comp: number;
   abs: number;
+  secoes: number;
   votos: Record<string, [number, number][]>;
 }

@@ -30,6 +30,18 @@ export interface Slice {
   valor: number;
 }
 
+export interface SearchResult {
+  kind: string;
+  label: string;
+  hint: string;
+  uf: Uf;
+  munId?: number;
+  ra?: number;
+  zone?: number;
+  candId?: number;
+  cargo?: string;
+}
+
 export interface View {
   ranks: RankRow[];
   regions: RegionRow[];
@@ -42,7 +54,7 @@ export interface View {
   concentration: { nome: string; acumulado: number }[];
   stacked: { labels: string[]; series: { nome: string; dados: number[] }[] };
   radar: { indicators: { name: string; max: number }[]; atual: number[]; referencia: number[] };
-  zones: { zona: number; aptos: number; comp: number; abs: number; sec: number; lider: string; votos: number }[];
+  zones: { zona: number; aptos: number; comp: number; abs: number; sec: number; lider: string; votos: number; regioes: string[]; locais: number }[];
   selected: Candidato | null;
   scopeLabel: string;
 }
@@ -336,18 +348,19 @@ function radarFor(turnout: { aptos: number; comp: number; abs: number }, nominal
 
 function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Candidato>, nominalIds: Set<number>, zoneIndex: Map<string, number>) {
   if (input.ra != null) {
-    const grouped = new Map<number, { aptos: number; comp: number; abs: number; sec: number; candidates: Map<number, number> }>();
+    const grouped = new Map<number, { aptos: number; comp: number; abs: number; sec: number; locais: number; candidates: Map<number, number> }>();
     for (const point of input.df.pontos) {
       if (point.ra !== input.ra) continue;
       let zone = grouped.get(point.zona);
       if (!zone) {
-        zone = { aptos: 0, comp: 0, abs: 0, sec: 0, candidates: new Map() };
+        zone = { aptos: 0, comp: 0, abs: 0, sec: 0, locais: 0, candidates: new Map() };
         grouped.set(point.zona, zone);
       }
       zone.aptos += point.aptos;
       zone.comp += point.comp;
       zone.abs += point.abs;
       zone.sec += point.secoes;
+      zone.locais += 1;
       for (const [id, value] of point.votos[input.cargo] ?? []) {
         zone.candidates.set(id, (zone.candidates.get(id) ?? 0) + value);
       }
@@ -364,7 +377,7 @@ function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Cand
           lider = titleCase(byId.get(id)?.nome ?? "—");
         }
       }
-      return { zona, aptos: values.aptos, comp: values.comp, abs: values.abs, sec: values.sec, lider, votos };
+      return { zona, aptos: values.aptos, comp: values.comp, abs: values.abs, sec: values.sec, lider, votos, regioes: [titleCase(input.df.ras[input.ra!]?.nome ?? "")], locais: values.locais };
     }).sort((a, b) => a.zona - b.zona);
   }
   const munId = input.uf === "DF" ? input.catalog.municipios.find((item) => item.uf === "DF")?.i : input.munId;
@@ -384,7 +397,11 @@ function zoneRows(input: Parameters<typeof buildView>[0], byId: Map<number, Cand
           leader = titleCase(byId.get(id)?.nome ?? "—");
         }
       }
-      return { zona: item.zona, aptos: item.aptos, comp: item.comp, abs: item.abs, sec: item.sec, lider: leader, votos };
+      const places = input.uf === "DF" ? input.df.pontos.filter((point) => point.zona === item.zona) : [];
+      const regionNames = [...new Set(places.flatMap((point) => point.ra == null ? [] : [titleCase(input.df.ras[point.ra]?.nome ?? "")]))];
+      const municipality = input.catalog.municipios.find((entry) => entry.i === item.mun);
+      const territories = input.uf === "DF" ? regionNames : [titleCase(municipality?.nome ?? "")];
+      return { zona: item.zona, aptos: item.aptos, comp: item.comp, abs: item.abs, sec: item.sec, lider: leader, votos, regioes: territories, locais: places.length };
     })
     .sort((a, b) => a.zona - b.zona);
 }
@@ -402,15 +419,37 @@ function makeReading(input: Parameters<typeof buildView>[0], turnout: { aptos: n
   return `${scopeLabel(input)}: ${leader.nome} lidera ${input.cargo.toLocaleLowerCase("pt-BR")} com ${leader.share.toFixed(1).replace(".", ",")}% dos votos nominais.${selectedText} Abstenção de ${abst.toFixed(1).replace(".", ",")}% sobre ${turnout.aptos.toLocaleString("pt-BR")} aptos. Brancos e nulos somam ${(branco + nulo).toLocaleString("pt-BR")} votos.`;
 }
 
-export function searchAll(catalog: Catalog, df: DfData, query: string) {
+export function searchAll(catalog: Catalog, df: DfData, zonas: Zona[], query: string, uf: Uf, munId: number | null): SearchResult[] {
   const needle = query.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
   if (needle.length < 2) return [];
-  const results: { kind: string; label: string; hint: string; uf: Uf; munId?: number; ra?: number; candId?: number; cargo?: string }[] = [];
+  const results: SearchResult[] = [];
+  const zoneMatch = needle.match(/^(?:zona|ze)\s*(\d+)$/);
+  if (zoneMatch) {
+    const number = Number(zoneMatch[1]);
+    const matches = zonas.filter((item) => {
+      if (item.zona !== number) return false;
+      const municipality = catalog.municipios.find((entry) => entry.i === item.mun);
+      if (!municipality || municipality.uf !== uf) return false;
+      return uf === "DF" || (munId != null && item.mun === munId);
+    });
+    return matches.slice(0, 12).map((item) => {
+      const municipality = catalog.municipios.find((entry) => entry.i === item.mun);
+      return {
+        kind: "Zona eleitoral",
+        label: `Zona ${item.zona}`,
+        hint: `${item.sec} seções · ${municipality?.uf ?? uf} · ${titleCase(municipality?.nome ?? "")}`,
+        uf,
+        munId: item.mun,
+        zone: item.zona,
+      };
+    });
+  }
   for (const mun of catalog.municipios) {
     if (fold(mun.nome).includes(needle)) results.push({ kind: "Município", label: titleCase(mun.nome), hint: mun.uf, uf: mun.uf, munId: mun.i });
   }
+  const regionNeedle = needle.replace(/^ra\s+/, "");
   df.ras.forEach((ra, index) => {
-    if (fold(ra.nome).includes(needle)) results.push({ kind: "Região administrativa", label: titleCase(ra.nome), hint: `RA ${ra.roman}`, uf: "DF", ra: index });
+    if (fold(ra.nome).includes(regionNeedle)) results.push({ kind: "Região administrativa", label: titleCase(ra.nome), hint: `RA ${ra.roman}`, uf: "DF", ra: index });
   });
   for (const point of df.pontos) {
     if (results.length > 16) break;

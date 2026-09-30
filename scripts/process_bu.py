@@ -27,6 +27,14 @@ ZIPS = {
 
 MAJOR = {"Presidente", "Governador", "Senador"}
 KEEP_MUN_MIN = {"nominal": 1, "legenda": 1, "branco": 1, "nulo": 1, "anulado": 1, "anulado_sep": 1}
+MANUAL_RA = {
+    ("15", "1643"): "Taguatinga",
+    ("15", "1651"): "Águas Claras",
+    ("16", "1627"): "Brazlândia",
+    ("17", "1430"): "Gama",
+    ("21", "1317"): "Recanto das Emas",
+    ("9", "1414"): "SIA",
+}
 
 
 def fold(value: str) -> str:
@@ -204,6 +212,9 @@ def load_places(regions: list[dict]) -> dict[tuple, dict]:
             if lat is not None and not (-35 < lat < 6 and -75 < lon < -30):
                 lat = lon = None
             ra = locate(lon, lat, regions) if uf == "DF" and lat is not None else None
+            if uf == "DF" and ra is None:
+                manual_name = MANUAL_RA.get((row["NR_ZONA"], row["NR_LOCAL_VOTACAO"]))
+                ra = next((index for index, region in enumerate(regions) if region["nome"] == manual_name), None)
             places[key] = {
                 "nome": row["NM_LOCAL_VOTACAO"],
                 "bairro": row["NM_BAIRRO"],
@@ -254,10 +265,9 @@ def stream_votes(uf: str, places: dict, mun_index: dict, sections: dict, votes: 
             numero = row[idx["NR_VOTAVEL"]]
             vote_key = (uf, mun_code, cargo, tipo, numero, nome, partido)
             votes[vote_key] = votes.get(vote_key, 0) + quantidade
-            if uf == "DF" or cargo in MAJOR:
-                zone_key = (uf, mun_code, zona, cargo, tipo, numero, nome, partido)
-                zone_store = stats.setdefault("zonas", {})
-                zone_store[zone_key] = zone_store.get(zone_key, 0) + quantidade
+            zone_key = (uf, mun_code, zona, cargo, tipo, numero, nome, partido)
+            zone_store = stats.setdefault("zonas", {})
+            zone_store[zone_key] = zone_store.get(zone_key, 0) + quantidade
             if uf == "DF" or cargo == "Presidente":
                 local_key = (uf, mun_code, zona, local, cargo, tipo, numero, nome, partido)
                 local_votes[local_key] = local_votes.get(local_key, 0) + quantidade
@@ -397,7 +407,7 @@ def main() -> None:
             ra_stats[ra]["abs"] += values[2]
             ra_stats[ra]["locais"] += 1
             ra_stats[ra]["secoes"] += values[3]
-        if not place or place["lat"] is None:
+        if not place:
             continue
         pontos.append({
             "nome": place["nome"],
@@ -405,8 +415,8 @@ def main() -> None:
             "zona": int(zona),
             "local": int(local),
             "ra": ra,
-            "lat": round(place["lat"], 5),
-            "lon": round(place["lon"], 5),
+            "lat": round(place["lat"], 5) if place["lat"] is not None else None,
+            "lon": round(place["lon"], 5) if place["lon"] is not None else None,
             "aptos": values[0],
             "comp": values[1],
             "abs": values[2],
@@ -431,15 +441,20 @@ def main() -> None:
         if uf != "SP":
             continue
         place = places.get((uf, zona, local))
-        if not place or place["lat"] is None:
+        if not place:
             continue
         sp_pontos_by_key[(cod, zona, local)] = {
-            "lon": round(place["lon"], 5),
-            "lat": round(place["lat"], 5),
+            "nome": place["nome"],
+            "bairro": place["bairro"],
+            "zona": int(zona),
+            "local": int(local),
+            "lon": round(place["lon"], 5) if place["lon"] is not None else None,
+            "lat": round(place["lat"], 5) if place["lat"] is not None else None,
             "mun": mun_ids[(uf, cod)],
             "aptos": values[0],
             "comp": values[1],
             "abs": values[2],
+            "secoes": values[3],
             "votos": defaultdict(list),
         }
     for (uf, cod, zona, local, cargo, tipo, numero, nome, partido), quantidade in local_votes.items():
@@ -456,7 +471,7 @@ def main() -> None:
     dump(OUT / "df.json", {
         "ras": ra_stats,
         "pontos": pontos,
-        "cobertura": {"locais": sum(1 for key in locais if key[0] == "DF"), "comCoordenada": len(pontos), "semRa": sem_ra},
+        "cobertura": {"locais": sum(1 for key in locais if key[0] == "DF"), "comCoordenada": sum(1 for point in pontos if point["lat"] is not None), "semRa": sem_ra},
         "nota": "Regiões Administrativas do Limite RA 2019 (IPE/DF). Locais atribuídos pela coordenada oficial do TSE. RAs criadas depois de 2019 permanecem no polígono de origem.",
     })
     dump(OUT / "sp-pontos.json", sp_pontos)

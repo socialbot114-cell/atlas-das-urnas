@@ -2,6 +2,8 @@
 
 Dashboard de exploração dos boletins de urna do primeiro turno de 2022 para o Distrito Federal e São Paulo. Aplicação estática em React + TypeScript + Vite, com dados agregados do TSE, busca textual, gráficos interativos e mapas.
 
+A busca também aceita `RA Taguatinga` e `Zona 15`. A tabela de zonas abre um modal com ranking do cargo selecionado e detalhamento por local de votação, com comparecimento, abstenção e candidato líder.
+
 ## Executar localmente
 
 Requer Node.js 20+ e Python 3.10+.

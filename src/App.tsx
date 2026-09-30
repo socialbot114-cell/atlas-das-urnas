@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Chart, donutOption, heatOption, lineOption, radarOption, rankingOption, scatterOption, stackedOption, treemapOption } from "./components/Charts";
 import { MapPanel } from "./components/MapPanel";
+import { ZoneDetailModal } from "./components/ZoneDetailModal";
 import { formatNumber, formatPct, titleCase } from "./lib/format";
 import { loadBase, loadGeo, loadSpPoints, loadVotes } from "./lib/load";
 import { buildView, cargosFor, searchAll } from "./lib/metrics";
+import { buildZoneDetail } from "./lib/zone-detail";
 import type { Catalog, DfData, Meta, Metric, MapMode, RaVotes, SpPoint, Theme, Uf, VoteFile, Zona } from "./types";
 
 const METRICS: { id: Metric; label: string }[] = [
@@ -30,6 +32,8 @@ export function App() {
   const [metric, setMetric] = useState<Metric>("share");
   const [mapMode, setMapMode] = useState<MapMode>("ambos");
   const [query, setQuery] = useState("");
+  const [zoneQuery, setZoneQuery] = useState("");
+  const [zoneModal, setZoneModal] = useState<number | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -66,7 +70,15 @@ export function App() {
     return buildView({ catalog: base.catalog, votes, zonas: base.zonas, df: base.df, raVotes: base.raVotes, uf, cargo, munId, ra, candId, partido, metric });
   }, [base, votes, uf, cargo, munId, ra, candId, partido, metric]);
 
-  const results = base && query.trim().length >= 2 ? searchAll(base.catalog, base.df, query) : [];
+  const results = base && query.trim().length >= 2 ? searchAll(base.catalog, base.df, base.zonas, query, uf, munId) : [];
+  const zoneDetail = useMemo(() => {
+    if (!base || !votes || zoneModal == null) return null;
+    return buildZoneDetail({ catalog: base.catalog, df: base.df, spPoints, votes, zonas: base.zonas, uf, zona: zoneModal, cargo, ra, munId });
+  }, [base, votes, spPoints, zoneModal, uf, cargo, ra, munId]);
+  const filteredZones = view?.zones.filter((item) => {
+    const needle = zoneQuery.trim().toLocaleLowerCase("pt-BR");
+    return !needle || String(item.zona).includes(needle) || item.lider.toLocaleLowerCase("pt-BR").includes(needle) || item.regioes.some((region) => region.toLocaleLowerCase("pt-BR").includes(needle));
+  }) ?? [];
   const activeId = candId ?? view?.selected?.i ?? null;
   const metricLabel = METRICS.find((item) => item.id === metric)?.label ?? "Indicador";
   const pointMetricLabel = uf === "SP" && !["Presidente", "Governador", "Senador"].includes(cargo) ? "Abstenção nos locais" : metricLabel;
@@ -75,7 +87,8 @@ export function App() {
     if (!base || !view) return [];
     if (uf === "DF") {
       const nominal = new Set(base.catalog.candidatos.filter((item) => item.uf === "DF" && item.cargo === cargo && item.tipo === "nominal").map((item) => item.i));
-      return base.df.pontos.filter((item) => ra == null || item.ra === ra).map((item) => {
+       return base.df.pontos.flatMap((item) => {
+        if (item.lat == null || item.lon == null || (ra != null && item.ra !== ra)) return [];
         let total = 0;
         let selected = 0;
         for (const [id, value] of item.votos[cargo] ?? []) {
@@ -84,10 +97,10 @@ export function App() {
           if (id === activeId) selected += value;
         }
         const weight = metric === "abstencao" || metric === "comparecimento" ? (item.aptos ? (metric === "abstencao" ? item.abs : item.comp) / item.aptos : 0) : total ? selected / total : 0;
-        return { lon: item.lon, lat: item.lat, w: weight, name: titleCase(item.nome) };
+        return [{ lon: item.lon, lat: item.lat, w: weight, name: titleCase(item.nome) }];
       });
     }
-    const pointsForScope = spPoints.filter((item) => munId == null || item.mun === munId);
+    const pointsForScope = spPoints.filter((item): item is SpPoint & { lat: number; lon: number } => item.lat != null && item.lon != null && (munId == null || item.mun === munId));
     const nominalIds = new Set(base.catalog.candidatos.filter((item) => item.uf === "SP" && item.cargo === cargo && item.tipo === "nominal").map((item) => item.i));
     const localMetrics = pointsForScope.map((item) => {
       const pairs = item.votos[cargo] ?? [];
@@ -121,10 +134,11 @@ export function App() {
 
   function chooseUf(next: Uf) {
     setUf(next);
-    setMunId(null);
-    setRa(null);
-    setCandId(null);
-    setPartido(null);
+      setMunId(null);
+      setRa(null);
+      setCandId(null);
+      setPartido(null);
+      setZoneQuery("");
   }
 
   function selectRegion(key: string | null) {
@@ -137,11 +151,13 @@ export function App() {
       const index = Number(key.slice(3));
       setRa((current) => (current === index ? null : index));
       setMunId(null);
+      setZoneQuery("");
       return;
     }
     const index = Number(key.slice(4));
     setMunId((current) => (current === index ? null : index));
     setRa(null);
+    setZoneQuery("");
   }
 
   if (error) return <main className="boot"><h1>Não foi possível abrir os dados</h1><p>{error}</p></main>;
@@ -171,7 +187,7 @@ export function App() {
             {([["ambos", "Mapa + calor"], ["regioes", "Regiões"], ["calor", "Calor"]] as [MapMode, string][]).map(([id, label]) => <button key={id} aria-pressed={mapMode === id} onClick={() => setMapMode(id)}>{label}</button>)}
           </div>
           <label className="search">Busca
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Candidato, município, RA ou local" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Candidato, município, RA, zona ou local" />
             {results.length > 0 && (
               <ul className="results">
                 {results.map((item, index) => (
@@ -182,7 +198,9 @@ export function App() {
                       setCandId(item.candId ?? null);
                       setMunId(item.munId ?? null);
                       setRa(item.ra ?? null);
+                      setZoneModal(item.zone ?? null);
                       setPartido(null);
+                      setZoneQuery("");
                       setQuery("");
                     }}>
                       <strong>{item.label}</strong>
@@ -248,12 +266,21 @@ export function App() {
           </div>
           {view.zones.length > 0 && (
             <>
-              <h3>Zonas do recorte</h3>
+              <div className="zone-explorer-heading">
+                <div><h3>Zonas eleitorais</h3><p>Selecione uma zona para abrir o resultado e os locais de votação.</p></div>
+                <label className="zone-list-search"><span className="sr-only">Pesquisar zonas por número, RA ou liderança</span><input value={zoneQuery} onChange={(event) => setZoneQuery(event.target.value)} placeholder="Pesquisar zona, RA ou liderança" /></label>
+              </div>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Zona</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
+                  <thead><tr><th>Zona</th><th>Região administrativa</th><th>Locais</th><th>Seções</th><th>Aptos</th><th>Abstenção</th><th>Líder nominal</th></tr></thead>
                   <tbody>
-                    {view.zones.map((item) => <tr key={item.zona}><td>{item.zona}</td><td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? (item.abs / item.aptos) * 100 : 0)}</td><td>{item.lider}</td></tr>)}
+                    {filteredZones.map((item) => <tr key={item.zona} className="zone-row" onClick={() => setZoneModal(item.zona)}>
+                      <td><button className="zone-open" onClick={(event) => { event.stopPropagation(); setZoneModal(item.zona); }}>Zona {item.zona}<span>ver detalhes ↗</span></button></td>
+                      <td>{item.regioes.length ? item.regioes.join(", ") : view.scopeLabel}</td>
+                      <td>{item.locais ? formatNumber(item.locais) : "—"}</td>
+                      <td>{formatNumber(item.sec)}</td><td>{formatNumber(item.aptos)}</td><td>{formatPct(item.aptos ? (item.abs / item.aptos) * 100 : 0)}</td><td>{item.lider}</td>
+                    </tr>)}
+                    {filteredZones.length === 0 && <tr><td colSpan={7} className="table-empty">Nenhuma zona corresponde à pesquisa.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -266,6 +293,7 @@ export function App() {
         <ul>{base.meta.avisos.map((item) => <li key={item}>{item}</li>)}</ul>
         <p>{base.meta.geografias.join(" · ")}</p>
       </footer>
+      <ZoneDetailModal detail={zoneDetail} onClose={() => setZoneModal(null)} />
     </>
   );
 }

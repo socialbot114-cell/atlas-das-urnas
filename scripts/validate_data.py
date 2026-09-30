@@ -35,6 +35,9 @@ def main():
     expect(len(df["ras"]), 33, "RAs na malha IPE/DF 2019")
     expect(len(df_geo["features"]), 33, "polígonos RA")
     expect(df["cobertura"]["semRa"], 0, "locais DF sem vínculo de RA")
+    expect(df["cobertura"]["locais"], 617, "locais de votação DF")
+    expect(df["cobertura"]["comCoordenada"], 611, "locais DF com coordenadas")
+    expect(len([item for item in df["pontos"] if item["lat"] is None and item["ra"] is not None]), 6, "locais sem coordenadas preservados nos microdados")
     expect(meta["secoes"]["SP"], 101073, "seções SP")
     expect(meta["secoes"]["DF"], 6748, "seções DF")
     expect(meta["municipiosSemMalha"], [], "municípios SP sem código IBGE")
@@ -54,6 +57,10 @@ def main():
     sao_paulo = next(item for item in catalog["municipios"] if item["uf"] == "SP" and item["nome"] == "SÃO PAULO")
     lula_city = sum(votes for mun, cand, votes in presidential["mun"] if mun == sao_paulo["i"] and cand == lula["i"])
     expect(lula_city, 3276512, "votos de Lula no município de São Paulo")
+    sp_points = load("sp-pontos.json")
+    if not sp_points or not all({"nome", "bairro", "zona", "local", "secoes"}.issubset(item) for item in sp_points):
+        raise AssertionError("Metadados de zona/local ausentes nos pontos de SP")
+    print(f"OK microdados geográficos de SP: {len(sp_points):,} locais identificados por zona/local")
     df_geo_votes = [pair for region in df_ra_votes["ras"] for pairs in region["votos"].values() for pair in pairs]
     if not df_geo_votes:
         raise AssertionError("Não há resultados agregados por RA")
