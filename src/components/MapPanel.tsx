@@ -1,4 +1,6 @@
 import { Map as MapLibreMap, NavigationControl, Popup, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { themeTokens } from "../lib/theme-tokens";
 import { useEffect, useRef, useState } from "react";
 import type { MapMode, Theme, Uf } from "../types";
 import { formatNumber, formatPct } from "../lib/format";
@@ -66,7 +68,7 @@ export function MapPanel({
     map.on("load", () => {
       map.addSource("areas", { type: "geojson", data: empty() });
       map.addSource("calor", { type: "geojson", data: empty() });
-        map.addLayer({ id: "areas", type: "fill", source: "areas", paint: { "fill-color": "#dce1dc", "fill-opacity": 0.78 } });
+        map.addLayer({ id: "areas", type: "fill", source: "areas", paint: { "fill-color": themeTokens(themeRef.current).line, "fill-opacity": 0.78 } });
       map.addLayer({
         id: "calor",
         type: "heatmap",
@@ -76,10 +78,10 @@ export function MapPanel({
           "heatmap-intensity": 1.1,
           "heatmap-radius": uf === "DF" ? 17 : 9,
           "heatmap-opacity": 0.58,
-           "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)", 0.35, "#286f73", 0.7, "#d4af86", 1, "#b46b48"],
+           "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)", 0.35, themeTokens(themeRef.current).pine, 0.7, themeTokens(themeRef.current).gold, 1, themeTokens(themeRef.current).accent],
         },
       });
-      map.addLayer({ id: "areas-line", type: "line", source: "areas", paint: { "line-color": theme === "dark" ? "#f2f1eb" : "#18242b", "line-width": 0.75, "line-opacity": 0.58 } });
+      map.addLayer({ id: "areas-line", type: "line", source: "areas", paint: { "line-color": themeTokens(themeRef.current).ink, "line-width": 0.75, "line-opacity": 0.58 } });
       map.on("click", "areas", (event) => {
         const key = event.features?.[0]?.properties?.key;
         selectRef.current(typeof key === "string" && key ? key : null);
@@ -112,7 +114,9 @@ export function MapPanel({
     const applyTheme = () => {
       map.setLayoutProperty("light", "visibility", theme === "light" ? "visible" : "none");
       map.setLayoutProperty("dark", "visibility", theme === "dark" ? "visible" : "none");
-       map.setPaintProperty("areas-line", "line-color", theme === "dark" ? "#f2f1eb" : "#18242b");
+       const tokens = themeTokens(theme);
+       map.setPaintProperty("areas-line", "line-color", tokens.ink);
+       map.setPaintProperty("calor", "heatmap-color", ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)", .35, tokens.pine, .7, tokens.gold, 1, tokens.accent]);
     };
     if (map.isStyleLoaded()) applyTheme();
     else map.once("load", applyTheme);
@@ -147,8 +151,8 @@ export function MapPanel({
       map.setPaintProperty("areas", "fill-color", [
         "case",
         ["<", ["get", "v"], 0],
-         theme === "dark" ? "#34434a" : "#dce1dc",
-         ["interpolate", ["linear"], ["get", "v"], 0, theme === "dark" ? "#263841" : "#e9f0ed", max, theme === "dark" ? "#d69a72" : "#b46b48"],
+         themeTokens(theme).line,
+         ["interpolate", ["linear"], ["get", "v"], 0, themeTokens(theme).soft, max, themeTokens(theme).accent],
       ]);
       map.setPaintProperty("areas-line", "line-width", ["case", ["==", ["get", "key"], selectedKey ?? ""], 2.4, 0.6]);
       const heat = map.getSource("calor") as GeoJSONSource | undefined;
@@ -166,7 +170,7 @@ export function MapPanel({
   }, [geo, regions, points, mode, theme, selectedKey, metricLabel, absolute]);
 
   useEffect(() => {
-    mapRef.current?.flyTo({ center: uf === "DF" ? [-47.86, -15.78] : [-48.6, -22.4], zoom: uf === "DF" ? 8.2 : 5.8, essential: true });
+    mapRef.current?.flyTo({ center: uf === "DF" ? [-47.86, -15.78] : [-48.6, -22.4], zoom: uf === "DF" ? 8.2 : 5.8, essential: false, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 500 });
   }, [uf]);
 
   return (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AtlasView } from "../types";
 
 export const WELCOME_STORAGE_KEY = "atlas-intro-v1";
 const STEP_COUNT = 3;
@@ -14,9 +15,9 @@ const STEPS = [
   {
     eyebrow: "DADOS ABERTOS · FONTES PÚBLICAS",
     title: "Do boletim por seção a uma visão do território.",
-    description: "O Atlas organiza os resultados oficiais do TSE por município, Região Administrativa, zona e local — conforme a cobertura disponível.",
+    description: "Investigue os microdados oficiais do TSE: do resultado territorial aos votos agregados por zona e local. A fonte, a cobertura e a base de cada percentual acompanham a leitura.",
     art: "dados",
-    facts: ["Boletins oficiais · TSE", "Mapas e gráficos interativos"],
+    facts: ["Boletins oficiais · TSE", "Microdados e exportação CSV"],
   },
   {
     eyebrow: "COMECE A EXPLORAR",
@@ -47,9 +48,10 @@ export function markWelcomeComplete() {
   }
 }
 
-export function WelcomeIntro({ onFinish }: { onFinish: (reason: "completed" | "skipped") => void }) {
+export function WelcomeIntro({ onFinish }: { onFinish: (reason: "completed" | "skipped", destination?: AtlasView) => void }) {
   const [step, setStep] = useState(0);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [destination, setDestination] = useState<AtlasView>("home");
   const methodologyPanel = useRef<HTMLElement>(null);
   const current = STEPS[step];
   const closeMethodology = useCallback(() => setMethodologyOpen(false), []);
@@ -89,21 +91,22 @@ export function WelcomeIntro({ onFinish }: { onFinish: (reason: "completed" | "s
           <button className="welcome-skip" onClick={() => onFinish("skipped")}>Pular introdução <span aria-hidden="true">↗</span></button>
         </header>
 
-        <section className="welcome-card" aria-live="polite">
-          <div className="welcome-art"><WelcomeArt kind={current.art} /></div>
+        <section className="welcome-card" data-step={current.art} aria-live="polite">
+          <div className="welcome-art"><span className="welcome-art-index">ATLAS / {String(step + 1).padStart(2, "0")}</span><WelcomeArt kind={current.art} /><span className="welcome-art-footnote">TERRITÓRIO · MICRODADOS · CONTEXTO</span></div>
           <div className="welcome-copy">
             <p className="eyebrow">{current.eyebrow}</p>
             <h1 id="welcome-title">{current.title}</h1>
             <p className="welcome-description">{current.description}</p>
             <div className="welcome-facts">{current.facts.map((fact) => <span key={fact}><i aria-hidden="true" />{fact}</span>)}</div>
             {step === 1 && <button className="welcome-methodology-trigger" onClick={() => setMethodologyOpen(true)}><span>Entenda os dados, a tecnologia e os percentuais</span><b aria-hidden="true">↗</b></button>}
+            {step === 2 && <div className="welcome-paths" role="group" aria-label="Onde começar"><button aria-pressed={destination === "home"} onClick={() => setDestination("home")}><span>01</span><strong>Visão geral</strong><small>Entenda o recorte</small></button><button aria-pressed={destination === "zonas"} onClick={() => setDestination("zonas")}><span>02</span><strong>Microdados</strong><small>Zonas e locais</small></button><button aria-pressed={destination === "territorio"} onClick={() => setDestination("territorio")}><span>03</span><strong>Território</strong><small>Explore o mapa</small></button></div>}
             <div className="welcome-progress" aria-label={`Etapa ${step + 1} de ${STEP_COUNT}`}>
               <span>{String(step + 1).padStart(2, "0")} <i>/ {String(STEP_COUNT).padStart(2, "0")}</i></span>
               <div>{STEPS.map((item, index) => <button key={item.art} aria-label={`Ir para etapa ${index + 1}`} aria-current={index === step ? "step" : undefined} onClick={() => setStep(index)} />)}</div>
             </div>
             <footer className="welcome-actions">
               {step > 0 && <button className="welcome-back" onClick={() => setStep((value) => value - 1)}>Voltar</button>}
-              <button className="welcome-next" onClick={() => step === STEP_COUNT - 1 ? onFinish("completed") : setStep((value) => value + 1)}>{step === STEP_COUNT - 1 ? "Explorar o Atlas" : "Continuar"}<span aria-hidden="true">{step === STEP_COUNT - 1 ? "↗" : "→"}</span></button>
+              <button className="welcome-next" onClick={() => step === STEP_COUNT - 1 ? onFinish("completed", destination) : setStep((value) => value + 1)}>{step === STEP_COUNT - 1 ? "Explorar o Atlas" : "Continuar"}<span aria-hidden="true">{step === STEP_COUNT - 1 ? "↗" : "→"}</span></button>
             </footer>
           </div>
         </section>
@@ -145,6 +148,6 @@ function WelcomeArt({ kind }: { kind: (typeof STEPS)[number]["art"] }) {
     <div className="explore-search"><span>⌕</span>Buscar candidato, município, RA ou zona<i>↵</i></div>
     <div className="explore-pills"><span>Distrito Federal</span><span>Presidente</span><span>1º turno</span></div>
     <div className="explore-map-preview"><div className="explore-outline" /><span className="explore-dot dot-a" /><span className="explore-dot dot-b" /><span className="explore-dot dot-c" /><span className="explore-selected"><b>Taguatinga</b><small>Toque para explorar</small></span></div>
-    <div className="explore-bottom-nav"><span>⌂ <small>Início</small></span><span>◇ <small>Mapa</small></span><span>▥ <small>Comparar</small></span><span>▤ <small>Zonas</small></span></div>
+    <div className="explore-bottom-nav"><span>⌂ <small>Início</small></span><span>◇ <small>Mapa</small></span><span>▥ <small>Comparar</small></span><span>▤ <small>Zonas</small></span><span>▦ <small>Análise</small></span></div>
   </div>;
 }

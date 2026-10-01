@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:branding": "node scripts/render-brand-assets.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test:data": "python3 scripts/validate_data.py",
     "test:e2e": "playwright test"

@@ -9,9 +9,17 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(Math.round(value));
 }
 
+export function formatCompact(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
 export function formatPct(value: number): string {
   if (!Number.isFinite(value)) return "—";
   return `${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)}%`;
+}
+
+export function formatPoints(value: number): string {
+  return `${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)} p.p.`;
 }
 
 export function titleCase(value: string): string {

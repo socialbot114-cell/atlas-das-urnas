@@ -29,7 +29,7 @@ test("carrega os indicadores, alterna UF e tema e pesquisa município", async ({
   await expect.poll(() => spPointRequests.length).toBeGreaterThan(0);
   expect(spPointRequests).toHaveLength(1);
   await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Análise/ }).click();
-  await expect(page.getByText("12.239.989")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "12.239.989", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Ativar tema escuro" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -54,7 +54,7 @@ test("pesquisa zona e RA e abre o modal de microdados da zona", async ({ page })
   await expect(dialog.getByRole("columnheader", { name: "Votos" })).toBeVisible();
   await dialog.getByPlaceholder("Pesquisar candidato ou partido").fill("Lula");
   await expect(dialog.getByText("Lula", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Jair Bolsonaro", { exact: true })).toHaveCount(0);
+  await expect(dialog.locator(".zone-results-table").getByText("Jair Bolsonaro", { exact: true })).toHaveCount(0);
 
   await dialog.getByRole("tab", { name: "Locais de votação" }).click();
   await expect(dialog.getByRole("columnheader", { name: "Local de votação" })).toBeVisible();
@@ -135,6 +135,7 @@ test("não apresenta votos parciais por local como resultado completo", async ({
   await expect(page.locator(".zone-card")).toHaveCount(0);
   await page.getByRole("button", { name: /Recorte:.*ver tudo/ }).click();
   await expect(page.locator(".zone-browser")).toBeVisible();
+  await page.getByRole("group", { name: "Exibição das zonas" }).getByRole("button", { name: "Tabela" }).click();
   await page.locator(".desktop-zone-table .zone-open").first().click();
   await expect(page.getByRole("dialog").getByText(/resultado de candidatos está consolidado para a zona/)).toBeVisible();
 });
@@ -160,13 +161,14 @@ test("mobile oferece navegação fixa, ajustes recolhíveis e respeita área seg
   expect((await page.request.get("/manifest.webmanifest")).ok()).toBeTruthy();
 });
 
-test("layouts compactos não criam rolagem horizontal nas quatro vistas", async ({ page }) => {
+test("layouts compactos não criam rolagem horizontal nas cinco vistas", async ({ page }) => {
   for (const width of [320, 360, 390, 430]) {
     await page.setViewportSize({ width, height: 760 });
     await page.goto("/");
     const nav = page.getByRole("navigation", { name: "Navegação principal" });
-    for (const label of ["Início", "Mapa", "Comparar", "Zonas"]) {
+    for (const label of ["Início", "Mapa", "Comparar", "Zonas", "Análise"]) {
       await nav.getByRole("button", { name: label }).click();
+      await expect(nav.getByRole("button", { name: label })).toHaveAttribute("aria-current", "page");
       const result = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, page: document.documentElement.scrollWidth }));
       expect(result.page, `width ${width}, view ${label}`).toBeLessThanOrEqual(result.viewport);
     }
@@ -226,7 +228,9 @@ test("toque no mapa seleciona uma região e abre as zonas correspondentes", asyn
   await page.locator(".maplibregl-canvas").waitFor();
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((entry) => entry.name.includes("df-ra.geojson")))).toBe(true);
   await expect(page.locator(".map-loading")).toHaveCount(0);
-  await page.locator(".maplibregl-canvas").click({ position: { x: 82, y: 72 } });
+  const mapSize = await page.locator(".maplibregl-canvas").boundingBox();
+  expect(mapSize).not.toBeNull();
+  await page.locator(".maplibregl-canvas").click({ position: { x: mapSize!.width * .36, y: mapSize!.height * .46 } });
   await expect(page.locator(".map-selection-card")).toBeVisible();
   const selectedArea = await page.locator(".map-selection-card strong").innerText();
   await page.locator(".map-selection-card").getByRole("button", { name: /Ver zonas/ }).click();
@@ -246,8 +250,62 @@ test("troca de cargo bloqueia resultados antigos até concluir o novo carregamen
   await page.locator(".mobile-options-panel").getByLabel("Cargo").selectOption("Deputado Federal");
   await expect(page.locator(".app-transition-layer")).toBeVisible();
   await expect(page.locator(".app-transition-layer")).toContainText("deputado federal");
+  await expect(page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Análise" })).toBeEnabled();
   await expect(page.locator(".app-transition-layer")).toHaveCount(0, { timeout: 10000 });
   await expect(page.locator(".mobile-options-current")).toContainText("Deputado Federal");
+});
+
+test("mobile pesquisa todo o ranking e preserva votos e percentual ao selecionar", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/?vista=panorama&uf=SP&cargo=Deputado%20Estadual");
+  const search = page.getByLabel("Pesquisar no ranking de candidatos");
+  await search.fill("PL");
+  const card = page.locator(".candidate-data-card").first();
+  await expect(card).toBeVisible();
+  const name = await card.locator(".candidate-data-name strong").innerText();
+  const share = await card.locator(".candidate-data-value b").innerText();
+  const votes = await card.locator(".candidate-data-value small").innerText();
+  await card.click();
+  await expect(card).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/candidato=/);
+  await expect(card.locator(".candidate-data-name strong")).toHaveText(name);
+  await expect(card.locator(".candidate-data-value b")).toHaveText(share);
+  await expect(card.locator(".candidate-data-value small")).toHaveText(votes);
+  await search.fill("candidatura inexistente xyz");
+  await expect(page.getByText("Nenhuma candidatura encontrada.", { exact: false })).toBeVisible();
+});
+
+test("exporta microdados filtrados da zona e preserva posição original no ranking", async ({ page }) => {
+  await page.goto("/?vista=zonas&zona=15");
+  const dialog = page.getByRole("dialog", { name: "Zona 15" });
+  await dialog.getByPlaceholder("Pesquisar candidato ou partido").fill("Lula");
+  await expect(dialog.locator(".zone-results-table tbody tr")).toHaveCount(1);
+  const rank = await dialog.locator(".zone-rank").innerText();
+  expect(Number(rank)).toBeGreaterThan(1);
+  const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Exportar microdados CSV ↗" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toContain("DF-zona-15-Presidente-resultado.csv");
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const csv = Buffer.concat(chunks).toString("utf8");
+  expect(csv).toContain("percentual_nominais");
+  expect(csv).toContain('"Lula"');
+  expect(csv).not.toContain("Jair Bolsonaro");
+  await dialog.getByRole("tab", { name: "Locais de votação" }).click();
+  await expect(dialog.getByRole("heading", { name: "Fonte, cobertura e percentuais" })).toBeVisible();
+});
+
+test("onboarding: oferece entrada direta para os microdados", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByRole("group", { name: "Onde começar" }).getByRole("button", { name: /Microdados/ }).click();
+  await page.getByRole("button", { name: "Explorar o Atlas" }).click();
+  await expect(page).toHaveURL(/vista=zonas/);
+  await expect(page.locator(".zone-card").first()).toBeVisible();
 });
 
 test("comparação mobile pesquisa listas de candidatos grandes", async ({ page }) => {
@@ -324,6 +382,10 @@ test("onboarding: a tela inicial cabe em iPhones compactos sem rolagem lateral",
   await page.goto("/");
   await expect(page.locator(".welcome-screen")).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuar" })).toBeInViewport();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByRole("button", { name: "Continuar" })).toBeInViewport();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByRole("button", { name: "Explorar o Atlas" })).toBeInViewport();
   const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
   expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
 });
@@ -347,4 +409,97 @@ test("Swetrix inicializa pageviews da SPA e recebe eventos sem termos pesquisado
   expect(tracking.views.search).toEqual(["vista"]);
   expect(tracking.events.map((event) => event.ev)).toEqual(expect.arrayContaining(["home_shortcut_clicked", "navigation_view_selected", "search_opened", "search_result_selected"]));
   expect(JSON.stringify(tracking.events)).not.toContain("Lula");
+});
+
+test("comparação inverte os candidatos sem alterar votos, base ou diferença", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?vista=comparar");
+  const first = page.locator(".comparison-card.first");
+  const second = page.locator(".comparison-card.second");
+  const firstName = await first.locator("h3").innerText();
+  const secondName = await second.locator("h3").innerText();
+  const firstShare = await first.locator(":scope > strong").innerText();
+  const secondVotes = await second.locator(".candidate-votes-line b").innerText();
+  const difference = await page.locator(".comparison-difference strong").innerText();
+  const base = await page.locator(".comparison-distribution .data-provenance").innerText();
+  await page.getByRole("button", { name: "Inverter candidatos" }).click();
+  await expect(first.locator("h3")).toHaveText(secondName);
+  await expect(second.locator("h3")).toHaveText(firstName);
+  await expect(second.locator(":scope > strong")).toHaveText(firstShare);
+  await expect(first.locator(".candidate-votes-line b")).toHaveText(secondVotes);
+  await expect(page.locator(".comparison-difference strong")).toHaveText(difference);
+  await expect(page.locator(".comparison-distribution .data-provenance")).toHaveText(base);
+  await page.reload();
+  await expect(first.locator("h3")).toHaveText(secondName);
+  await expect(second.locator("h3")).toHaveText(firstName);
+});
+
+test("comparação territorial respeita o recorte e abre as zonas da mesma área", async ({ page }) => {
+  await page.goto("/?vista=comparar&ra=2");
+  await expect(page.locator(".territory-duel")).toHaveCount(1);
+  const territory = await page.locator(".territory-duel-heading > strong").innerText();
+  await page.getByRole("button", { name: `Explorar zonas de ${territory}` }).click();
+  await expect(page).toHaveURL(/vista=zonas.*ra=2/);
+  await expect(page.locator(".zone-browser h2")).toHaveText(territory);
+  await expect(page.locator(".zone-card").first()).toBeVisible();
+});
+
+test("zona por zona mantém a aba de locais e permite ordenar por seções", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/?vista=zonas");
+  const opener = page.locator(".zone-card").first();
+  await opener.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Zona anterior" })).toBeDisabled();
+  await dialog.getByRole("tab", { name: "Locais de votação" }).click();
+  await dialog.getByLabel("Ordenar locais").selectOption("sections");
+  const counts = await dialog.locator('.zone-locations-wrap td[data-label="Seções"]').allTextContents();
+  const numbers = counts.map((count) => Number(count.replace(/\D/g, "")));
+  expect(numbers).toEqual([...numbers].sort((a, b) => b - a));
+  await dialog.getByRole("button", { name: "Próxima zona" }).click();
+  await expect(dialog.getByRole("heading", { name: "Zona 2", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("tab", { name: "Locais de votação" })).toHaveAttribute("aria-selected", "true");
+  await expect(dialog.getByLabel("Ordenar locais")).toHaveValue("sections");
+  const dimensions = await page.evaluate(() => ({ viewport: innerWidth, page: document.documentElement.scrollWidth, modal: document.querySelector(".zone-modal")!.scrollWidth, available: document.querySelector(".zone-modal")!.clientWidth }));
+  expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport);
+  expect(dimensions.modal).toBeLessThanOrEqual(dimensions.available);
+  await dialog.getByRole("button", { name: "Zona anterior" }).click();
+  await expect(dialog.getByRole("heading", { name: "Zona 1", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Fechar detalhes da zona" }).click();
+  await expect(opener).toBeFocused();
+});
+
+test("fichas e tabela de zonas preservam o mesmo resultado filtrado", async ({ page }) => {
+  await page.goto("/?vista=zonas");
+  await page.getByLabel("Pesquisar zonas por número, região ou liderança").fill("Taguatinga");
+  const cards = await page.locator(".zone-card-title > strong").allTextContents();
+  expect(cards.length).toBeGreaterThan(0);
+  await page.getByRole("group", { name: "Exibição das zonas" }).getByRole("button", { name: "Tabela" }).click();
+  const cells = await page.locator(".desktop-zone-table .zone-open").allTextContents();
+  expect(cells.map((cell) => cell.replace("ver detalhes ↗", ""))).toEqual(cards);
+  await page.getByRole("group", { name: "Exibição das zonas" }).getByRole("button", { name: "Fichas" }).click();
+  await expect(page.locator(".zone-card").first()).toBeVisible();
+});
+
+test("movimento reduzido mantém os dados imediatos e desliga animações dos cards", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?vista=comparar");
+  await expect(page.locator(".comparison-card.first > strong")).toHaveText("51,7%");
+  await expect(page.locator(".candidate-share-track i").first()).toHaveCSS("animation-name", "none");
+  await page.getByRole("navigation", { name: "Vistas do atlas" }).getByRole("button", { name: /Zonas e locais/ }).click();
+  await page.locator(".zone-card").first().click();
+  await expect(page.locator(".zone-modal")).toHaveCSS("animation-name", "none");
+});
+
+test("comparação de SP adia os microdados locais até abrir as zonas", async ({ page }) => {
+  const localRequests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("sp-pontos.json")) localRequests.push(request.url()); });
+  await page.goto("/?vista=comparar&uf=SP");
+  await expect(page.locator(".comparison-card.first > strong")).toBeVisible();
+  await expect(page.locator(".territory-duel").first()).toBeVisible();
+  expect(localRequests).toHaveLength(0);
+  await page.getByLabel("Pesquisar território").fill("Campinas");
+  await page.getByRole("button", { name: "Explorar zonas de Campinas", exact: true }).click();
+  await expect(page.locator(".zone-card").first()).toBeVisible();
+  expect(localRequests).toHaveLength(1);
 });
