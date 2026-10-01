@@ -6,7 +6,9 @@ A navegação oferece **Início**, **Análise**, **Território**, **Comparar** e
 
 O painel é otimizado para celular, oferece navegação fixa inferior e pode ser adicionado à tela inicial pelo menu de compartilhamento do navegador; o manifesto define o nome, o ícone e o modo de abertura do app.
 
-Na primeira visita, uma introdução apresenta o recorte eleitoral, as fontes, os resultados agregados e os principais caminhos de exploração. É possível pular a apresentação, revê-la depois pela opção **Como usar o Atlas** nos filtros móveis ou pela Ajuda no desktop, e links compartilhados para uma vista específica abrem diretamente essa análise.
+Na primeira visita, uma introdução cinematográfica apresenta a passagem dos boletins ao território e o zoom de zona → local → seção. Parallax, partículas e legendas acompanham a rolagem; uma barra lateral permite arrastar o percurso por mouse ou toque e navegar pelo teclado. Os exemplos de boletim são ilustrativos. Ao final, os atalhos abrem as vistas ou a busca do Atlas na mesma aba. É possível pular a apresentação, revê-la pela opção **Como usar o Atlas** nos filtros móveis ou pela Ajuda no desktop, e links compartilhados para uma análise abrem diretamente essa vista.
+
+O original cinematográfico é preservado em `public/intro/cinema.html`, isolado em um iframe de mesma origem por `WelcomeIntro.tsx`. As fontes são locais. A conclusão é comunicada ao aplicativo via `postMessage`, validando origem e janela; o runtime da introdução é descartado quando o iframe sai da tela. A chave `atlas-intro-cinema-v1` registra a conclusão desta versão da introdução.
 
 Na vista Comparar, os candidatos são apresentados em votos nominais e participação; diferenças de participação são expressas em pontos percentuais. No mapa, a escala de votos absolutos é numérica. Os locais de SP têm votação completa por candidato no arquivo público somente para presidente; no DF, para presidente, governador e senador. Para os demais cargos, o calor representa comparecimento ou abstenção e a legenda informa isso. Os resultados agregados por zona e território continuam disponíveis para todos os cargos.
 

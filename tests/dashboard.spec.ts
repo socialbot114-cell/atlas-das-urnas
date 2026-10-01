@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }, testInfo) => {
   if (!testInfo.title.startsWith("onboarding:")) {
-    await page.addInitScript(() => window.localStorage.setItem("atlas-intro-v1", "complete"));
+    await page.addInitScript(() => window.localStorage.setItem("atlas-intro-cinema-v1", "complete"));
   }
 });
 
@@ -300,10 +300,10 @@ test("exporta microdados filtrados da zona e preserva posição original no rank
 test("onboarding: oferece entrada direta para os microdados", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await page.getByRole("group", { name: "Onde começar" }).getByRole("button", { name: /Microdados/ }).click();
-  await page.getByRole("button", { name: "Explorar o Atlas" }).click();
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await intro.getByRole("slider", { name: "Progresso da introdução" }).press("End");
+  await intro.getByRole("link", { name: /Encontre uma zona/ }).click();
   await expect(page).toHaveURL(/vista=zonas/);
   await expect(page.locator(".zone-card").first()).toBeVisible();
 });
@@ -327,43 +327,40 @@ test("comparação mobile pesquisa listas de candidatos grandes", async ({ page 
 test("onboarding: apresenta dados, explica a ferramenta e pode ser revisto", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Veja a eleição para além do resultado final." })).toBeVisible();
-  await expect(page.getByText("Distrito Federal", { exact: true })).toBeVisible();
-
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("heading", { name: "Do boletim por seção a uma visão do território." })).toBeVisible();
-  await page.getByRole("button", { name: /Entenda os dados, a tecnologia e os percentuais/ }).click();
-  const dataSheet = page.getByRole("dialog", { name: "Entenda os dados" });
-  await expect(dataSheet.getByText(/sem registros que identifiquem a escolha de cada eleitor/)).toBeVisible();
-  await expect(dataSheet.getByText(/MapLibre/)).toBeVisible();
-  await dataSheet.getByRole("button", { name: "Entendi" }).click();
-  await expect(page.getByRole("button", { name: "Continuar" })).toBeInViewport();
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("heading", { name: "Escolha uma pergunta. O Atlas mostra o caminho." })).toBeVisible();
-  await expect(page.getByText(/Busque um candidato, partido, município, RA ou zona/)).toBeVisible();
-  await page.getByRole("button", { name: "Explorar o Atlas" }).click();
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await expect(intro.getByRole("heading", { name: "Do boletim por seção a uma visão do território." })).toBeVisible();
+  await intro.locator("#stage").evaluate((stage) => window.scrollTo(0, (stage as HTMLElement).offsetTop + (stage.clientHeight - innerHeight) * .5));
+  await expect(intro.locator("#stage .cap.on h2")).toHaveText("E o território aparece.");
+  await intro.locator("#micro").evaluate((micro) => window.scrollTo(0, (micro as HTMLElement).offsetTop + (micro.clientHeight - innerHeight) * .95));
+  await expect(intro.locator("#micro .cap.on h2")).toHaveText("E na seção, o boletim de urna.");
+  await expect(intro.locator("#k2")).toHaveClass(/on/);
+  await intro.getByRole("slider", { name: "Progresso da introdução" }).press("End");
+  await intro.getByRole("link", { name: "Abrir o Atlas", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas-intro-v1"))).toBe("complete");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas-intro-cinema-v1"))).toBe("complete");
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
-  await expect(page.locator(".welcome-screen")).toHaveCount(0);
+  await expect(page.locator(".cinema-intro-shell")).toHaveCount(0);
   await page.locator(".mobile-options summary").click();
   await page.getByRole("button", { name: "Como usar o Atlas" }).click();
-  await expect(page.locator(".welcome-screen")).toBeVisible();
+  await expect(page.locator(".cinema-intro-shell")).toBeVisible();
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await expect(intro.getByRole("slider")).toHaveAttribute("aria-valuenow", "0");
 });
 
 test("onboarding: pode ser pulado sem impedir o acesso ao painel", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".welcome-screen")).toBeVisible();
-  await page.getByRole("button", { name: /Pular introdução/ }).click();
+  await expect(page.locator(".cinema-intro-shell")).toBeVisible();
+  await page.frameLocator(".cinema-intro-frame").getByRole("link", { name: "Pular introdução" }).click();
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas-intro-v1"))).toBe("complete");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas-intro-cinema-v1"))).toBe("complete");
 });
 
 test("onboarding: links de análises compartilhadas abrem direto na vista pedida", async ({ page }) => {
   await page.goto("/?vista=territorio&ra=2");
-  await expect(page.locator(".welcome-screen")).toHaveCount(0);
+  await expect(page.locator(".cinema-intro-shell")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Do maior para o menor" })).toBeVisible();
 });
 
@@ -372,20 +369,26 @@ test("onboarding: continua funcionando se o navegador bloquear armazenamento loc
     Object.defineProperty(window, "localStorage", { get() { throw new DOMException("Storage blocked", "SecurityError"); } });
   });
   await page.goto("/");
-  await expect(page.locator(".welcome-screen")).toBeVisible();
-  await page.getByRole("button", { name: /Pular introdução/ }).click();
+  await expect(page.locator(".cinema-intro-shell")).toBeVisible();
+  await page.frameLocator(".cinema-intro-frame").getByRole("link", { name: "Pular introdução" }).click();
   await expect(page.getByRole("heading", { name: "Atlas das Urnas" })).toBeVisible();
 });
 
 test("onboarding: a tela inicial cabe em iPhones compactos sem rolagem lateral", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/");
-  await expect(page.locator(".welcome-screen")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continuar" })).toBeInViewport();
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("button", { name: "Continuar" })).toBeInViewport();
-  await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("button", { name: "Explorar o Atlas" })).toBeInViewport();
+  await expect(page.locator(".cinema-intro-shell")).toBeVisible();
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await expect(intro.getByRole("link", { name: "Pular introdução" })).toBeInViewport();
+  const child = page.frame({ url: /\/intro\/cinema\.html/ })!;
+  for (const phase of [0, .25, .55, .8, 1]) {
+    await child.evaluate((phase) => window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) * phase), phase);
+    const inner = await child.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
+    expect(inner.document).toBeLessThanOrEqual(inner.viewport);
+  }
+  await intro.getByRole("link", { name: "Abrir o Atlas", exact: true }).scrollIntoViewIfNeeded();
+  await expect(intro.getByRole("link", { name: "Abrir o Atlas", exact: true })).toBeInViewport();
   const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, document: document.documentElement.scrollWidth }));
   expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
 });
@@ -502,4 +505,83 @@ test("comparação de SP adia os microdados locais até abrir as zonas", async (
   await page.getByRole("button", { name: "Explorar zonas de Campinas", exact: true }).click();
   await expect(page.locator(".zone-card").first()).toBeVisible();
   expect(localRequests).toHaveLength(1);
+});
+
+test("onboarding: arraste por toque percorre a introdução e termina no sistema", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/");
+    const intro = page.frameLocator(".cinema-intro-frame");
+    await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+    const track = await intro.getByRole("slider").boundingBox();
+    expect(track).not.toBeNull();
+    const cdp = await context.newCDPSession(page);
+    const point = (fraction: number) => [{ x: track!.x + track!.width / 2, y: track!.y + track!.height * fraction }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(.05) });
+    for (let step = 1; step <= 12; step++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(.05 + step / 12 * .9) });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(async () => Number(await intro.getByRole("slider").getAttribute("aria-valuenow"))).toBeGreaterThan(90);
+    await intro.getByRole("link", { name: "Abrir o Atlas", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Atlas das Urnas", exact: true })).toBeVisible();
+    await expect(page.locator(".cinema-intro-frame")).toHaveCount(0);
+    expect(context.pages()).toHaveLength(1);
+    expect(errors).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("onboarding: ponteiro e rolagem movem o parallax do original", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  const strip = intro.locator(".strip").first();
+  await expect(strip).not.toHaveCSS("transform", "none");
+  const before = await strip.evaluate((node) => (node as HTMLElement).style.transform);
+  await page.mouse.move(1100, 300);
+  await expect.poll(() => strip.evaluate((node) => (node as HTMLElement).style.transform)).not.toBe(before);
+  await page.mouse.wheel(0, 240);
+  await expect.poll(() => intro.locator(".hero-in").evaluate((node) => (node as HTMLElement).style.transform)).not.toBe("translate3d(0px, 0px, 0px)");
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+for (const [label, view] of [["Explore o território", "territorio"], ["Compare candidatos", "comparar"], ["Abra a análise completa", "panorama"]]) {
+  test(`onboarding: atalho final abre ${view} na mesma aba`, async ({ page }) => {
+    await page.goto("/");
+    const intro = page.frameLocator(".cinema-intro-frame");
+    await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+    await intro.getByRole("slider").press("End");
+    await intro.getByRole("link", { name: new RegExp(label) }).click();
+    await expect(page).toHaveURL(new RegExp(`vista=${view}`));
+    await expect(page.locator(".cinema-intro-shell")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Atlas das Urnas", exact: true })).toBeVisible();
+  });
+}
+
+test("onboarding: busca final abre a busca funcional do Atlas", async ({ page }) => {
+  await page.goto("/");
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await intro.getByRole("slider").press("End");
+  await intro.getByRole("link", { name: /Buscar .* no Atlas/ }).click();
+  const search = page.getByRole("dialog", { name: "Buscar no Atlas" });
+  await expect(search).toBeVisible();
+  await search.getByRole("textbox").fill("Lula");
+  await search.getByRole("button", { name: /Lula.*Presidente/ }).first().click();
+  await expect(page.locator(".home-leader-name")).toHaveText("Lula");
+});
+
+test("onboarding: movimento reduzido preserva o percurso e a entrada no Atlas", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const intro = page.frameLocator(".cinema-intro-frame");
+  await expect(intro.locator("html")).toHaveAttribute("data-cinema-ready", "true");
+  await expect(intro.locator(".w > span").first()).toHaveCSS("animation-name", "none");
+  await expect(intro.locator(".strip > span").first()).toHaveCSS("animation-name", "none");
+  await intro.getByRole("slider").press("End");
+  await expect(intro.getByRole("slider")).toHaveAttribute("aria-valuenow", "100");
+  await intro.getByRole("link", { name: "Abrir o Atlas", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Atlas das Urnas", exact: true })).toBeVisible();
 });

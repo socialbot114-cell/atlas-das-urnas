@@ -70,8 +70,8 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { window.localStorage.setItem("tema", theme); } catch { /* The selected theme remains active for this visit. */ }
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#101820" : "#f6f4ef");
-  }, [theme]);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", welcomeOpen ? "#0e151b" : theme === "dark" ? "#101820" : "#f6f4ef");
+  }, [theme, welcomeOpen]);
 
   useEffect(() => {
     writeUrlState({ view: atlasView, uf, cargo, munId, ra, candId, compareId, metric, mapMode, zone: zoneModal, theme });
@@ -312,9 +312,10 @@ export function App() {
   const closeMobileSearch = useCallback(() => { setMobileSearchOpen(false); setMobileSearch(""); setQuery(""); }, []);
   const closeMunicipalityPicker = useCallback(() => { setMunicipalityPickerOpen(false); setMunicipalityQuery(""); }, []);
   const closeCandidatePicker = useCallback(() => { setCandidatePickerTarget(null); setCandidateQuery(""); }, []);
-  const finishWelcome = useCallback((reason: "completed" | "skipped", destination?: AtlasView) => {
+  const finishWelcome = useCallback((reason: "completed" | "skipped", destination?: AtlasView, search?: boolean) => {
     markWelcomeComplete(); trackSwetrixEvent(`onboarding_${reason}`); setWelcomeOpen(false);
     if (destination) { setAtlasView(destination); trackSwetrixEvent("navigation_view_selected", { view: destination }); }
+    if (search) { setMobileSearchOpen(true); setQuery(""); setMobileSearch(""); trackSwetrixEvent("search_opened", { source: "cinematic_intro" }); }
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
 
