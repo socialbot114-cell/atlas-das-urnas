@@ -38,7 +38,7 @@ function send(event: PendingEvent) {
 
 export function trackSwetrixEvent(ev: string, meta?: SwetrixEventMeta, unique = false) {
   if (typeof window === "undefined") return;
-  const event: PendingEvent = { ev, ...(meta ? { meta } : {}), unique };
+  const event: PendingEvent = { ev, meta: { app: "atlas-2022", ...meta }, unique };
   if (ready && window.swetrix) {
     send(event);
     return;

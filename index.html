@@ -32,7 +32,7 @@
           window.swetrix.init("SHQpMQlC6hpN", {
             apiURL: "https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/v1/log",
           });
-          window.swetrix.trackViews({ search: ["vista"] });
+          window.swetrix.trackViews({ search: ["vista"], callback:function(p){return{pg:"/atlas-2022"+(p.pg==="/"?"":p.pg)}} });
           window.__atlasSwetrixReady = true;
           window.dispatchEvent(new Event("atlas-swetrix-ready"));
         } catch (error) {

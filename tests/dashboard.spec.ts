@@ -410,7 +410,9 @@ test("Swetrix inicializa pageviews da SPA e recebe eventos sem termos pesquisado
   expect(tracking.config.options.apiURL).toBe("https://blogs-swetrix-frontend.rwezkp.easypanel.host/backend/v1/log");
   expect(tracking.config.options.respectDNT).toBeUndefined();
   expect(tracking.views.search).toEqual(["vista"]);
+  expect(await page.evaluate(() => { const cb = window.__swetrixViews.callback; return [cb({ pg: "/" }).pg, cb({ pg: "/?vista=zonas" }).pg]; })).toEqual(["/atlas-2022", "/atlas-2022/?vista=zonas"]);
   expect(tracking.events.map((event) => event.ev)).toEqual(expect.arrayContaining(["home_shortcut_clicked", "navigation_view_selected", "search_opened", "search_result_selected"]));
+  expect(tracking.events.every((event) => event.meta?.app === "atlas-2022")).toBe(true);
   expect(JSON.stringify(tracking.events)).not.toContain("Lula");
 });
 
