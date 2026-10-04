@@ -1,0 +1,28 @@
+﻿uf,instituto,registro_TSE,coleta,cenario,cand1,cand2,fonte
+DF,Correio/Opiniao,DF-04077/2026,~ago/2026,Celina x Arruda,Celina Leao 43.6%,Arruda 40.1%,correiobraziliense
+DF,Real Time Big Data,DF-07849/2026,14-18/ago/2026,Celina x Arruda,Celina 42%,Arruda 30%,cnnbrasil
+DF,Real Time Big Data,DF-07849/2026,14-18/ago/2026,Celina x Grass,Celina 51%,Grass 32%,cnnbrasil
+DF,Real Time Big Data,DF-07849/2026,14-18/ago/2026,Arruda x Grass (s/ Celina),Arruda 44%,Grass 34%,cnnbrasil
+DF,AtlasIntel,DF-02018/2026,27ago-01set/2026,Arruda x Celina,Arruda 38.7%,Celina 38.0%,gazetadopovo
+DF,AtlasIntel,DF-02018/2026,27ago-01set/2026,Celina x Grass,Celina 43.6%,Grass 41.1%,gazetadopovo
+DF,AtlasIntel,DF-02018/2026,27ago-01set/2026,Arruda x Grass,Grass 38.2%,Arruda 34.2%,gazetadopovo
+DF,Datafolha,DF-01888/2026,22-24/set/2026,Celina x Arruda,Celina 48% (era 51),Arruda 35% (era 34),g1
+DF,Datafolha,DF-01888/2026,22-24/set/2026,Celina x Grass,Celina 53% (era 56),Grass 34% (era 30),g1
+DF,Datafolha,DF-01888/2026,22-24/set/2026,Arruda x Grass,Arruda 43% (era 46),Grass 36% (era 34),g1
+DF,Quaest 21-24/ago DF-06256,,ago/2026,Celina x Arruda,Celina 42%,Arruda 32%,g1
+DF,Quaest 21-24/ago DF-06256,,ago/2026,Celina x Grass,Celina 52%,Grass 24%,g1
+DF,Quaest 21-24/ago DF-06256,,ago/2026,Arruda x Grass,Arruda 44%,Grass 26%,g1
+DF,Quaest 04-07/set DF-01987,,set/2026,Celina x Arruda,Celina 47%,Arruda 30%,uol
+DF,Quaest 04-07/set DF-01987,,set/2026,Arruda x Grass,Arruda 41%,Grass 28%,uol
+DF,RealTime ~05/set,,set/2026,Celina x Arruda,Celina 44%,Arruda 29%,exame
+DF,RealTime ~05/set,,set/2026,Celina x Grass,Celina 50%,Grass 32%,exame
+DF,RealTime ~05/set,,set/2026,Arruda x Grass s/ Celina,Arruda 42%,Grass 34%,exame
+DF,Datafolha 08-11/set,,set/2026,Celina x Arruda,Celina 51%,Arruda 34%,gazetadopovo/folha
+DF,Datafolha 08-11/set,,set/2026,Arruda x Grass,Arruda 46%,Grass 34%,gazetadopovo
+DF,Datafolha 08-11/set,,set/2026,Celina x Grass,Celina 56%,Grass 30%,gazetadopovo
+DF,Quaest 19-22/set DF-02596,,set/2026,Celina x Arruda,Celina 43% (era 47),Arruda 32% (era 30),g1
+DF,Quaest 19-22/set DF-02596,,set/2026,Arruda x Grass,Arruda 38% (era 41),Grass 31% (era 28),g1
+DF,Quaest 19-22/set DF-02596,,set/2026,Celina x Grass,Celina 48% (era 52),Grass 30% (era 29),g1
+DF,Quaest 25-28/set DF-02515,,set/2026,"Celina x Grass (unico, Arruda barrado)",Celina 54% (era 48),Grass 31% (era 30),g1 29/09
+DF,Quaest VESPERA 03/10,,03/10/2026,Celina x Grass validos,Celina 50%,Grass 33%,gazetadopovo/uol
+DF,Quaest VESPERA 03/10,,03/10/2026,Celina x Belmonte,Celina 47%,Belmonte 31%,gazetadopovo
